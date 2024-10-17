@@ -5,11 +5,12 @@ import logging
 log = logging.getLogger()
 
 class ImportFile:
-    def __init__(self, upload_key, file_path):
+    def __init__(self, upload_key, file_path, local_path):
         self.upload_key=upload_key
         self.file_path=file_path
+        self.local_path = local_path
     def __repr__(self):
-        return f"ImportFile(upload_key={self.upload_key}, file_path={self.file_path})"
+        return f"ImportFile(upload_key={self.upload_key}, file_path={self.file_path}, local_path={self.local_path})"
 
 class ImportClient:
     def __init__(self, api_host):

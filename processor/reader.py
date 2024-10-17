@@ -113,12 +113,13 @@ class NWBElectricalSeriesReader:
                     group_name = group_name.iloc[0]
 
                 channels.append(
+                        # convert start / end to microseconds to maintain precision
                         TimeSeriesChannel(
                             index = index,
                             name = name,
                             rate = self.sampling_rate,
-                            start = self.timestamps[0] , # safe access gaurenteed by initialization assertions
-                            end = self.timestamps[-1],
+                            start = self.timestamps[0] * 1e6 , # safe access gaurenteed by initialization assertions
+                            end = self.timestamps[-1] * 1e6,
                             group = group_name
                         )
                     )

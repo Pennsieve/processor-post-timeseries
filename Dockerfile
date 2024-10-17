@@ -10,4 +10,6 @@ RUN pip install -r /processor/requirements.txt
 
 COPY processor/ /processor
 
-CMD ["python3.12", "/processor/main.py" ]
+ENV PYTHONPATH="/"
+
+CMD ["python3.12", "-m", "processor.main"]
