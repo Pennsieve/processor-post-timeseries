@@ -1,5 +1,7 @@
 import os
 import logging
+import pyedflib
+from datetime import datetime, timezone
 
 from pynwb import NWBHDF5IO
 from pynwb.ecephys import ElectricalSeries
@@ -7,6 +9,7 @@ from pynwb.ecephys import ElectricalSeries
 from config import Config
 from importer import import_timeseries
 from writer import TimeSeriesChunkWriter
+from bdf_reader import BDFElectricalSeriesReader
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -22,23 +25,22 @@ if __name__ == "__main__":
     input_files = [
         f.path
         for f in os.scandir(config.INPUT_DIR)
-        if f.is_file() and os.path.splitext(f.name)[1].lower() == '.nwb'
+        if f.is_file() and os.path.splitext(f.name)[1].lower() == '.bdf'
     ]
 
-    assert len(input_files) == 1, "NWB post processor only supports a single file as input"
+    assert len(input_files) == 1, "BDF post processor only supports a single file as input"
 
-    with NWBHDF5IO(input_files[0], mode="r") as io:
-        nwb = io.read()
-        electrical_series = [acq for acq in nwb.acquisition.values() if type(acq) == ElectricalSeries]
-        if len(electrical_series) < 1:
-            log.error('NWB file has no continuous raw electrical series data')
-        if len(electrical_series) > 1:
-            log.warn('NWB file has multiple raw electrical series acquisitions')
+    with pyedflib.EdfReader(input_files[0]) as edf:
 
-        chunked_writer = TimeSeriesChunkWriter(nwb.session_start_time, config.OUTPUT_DIR, chunk_size)
+        start_datetime = edf.getStartdatetime()
 
-        for series in electrical_series:
-            chunked_writer.write_electrical_series(series)
+        # Stop timezone warning. Explicity set tz to UTC
+        session_start_time = start_datetime.replace(tzinfo=timezone.utc)
+
+        reader = BDFElectricalSeriesReader(edf, session_start_time)
+
+        chunked_writer = TimeSeriesChunkWriter(session_start_time, config.OUTPUT_DIR, chunk_size)
+        chunked_writer.write_electrical_series(reader)
 
     # import requires Pennsieve API access; when developing locally this is most often not required
     # note: this will be moved to a separated post-processor once the analysis pipeline is more
