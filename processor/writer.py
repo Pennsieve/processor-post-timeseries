@@ -23,7 +23,7 @@ class TimeSeriesChunkWriter:
         self.output_dir = output_dir
         self.chunk_size = chunk_size
 
-    def write_electrical_series(self, electrical_series):
+    def write_electrical_series(self, reader):
         """
         Chunks the sample data in two stages:
             1. Splits sample data into contiguous segments using the given or generated timestamp values
@@ -31,14 +31,13 @@ class TimeSeriesChunkWriter:
 
         Writes each chunk to the given output directory
         """
-        reader = NWBElectricalSeriesReader(electrical_series, self.session_start_time)
 
         for contiguous_start, contiguous_end in reader.contiguous_chunks():
             for chunk_start in range(contiguous_start, contiguous_end, self.chunk_size):
                 chunk_end = min(contiguous_end, chunk_start + self.chunk_size)
 
                 start_time = reader.timestamps[chunk_start]
-                end_time = reader.timestamps[chunk_end-1]
+                end_time = reader.timestamps[chunk_end - 1]
 
                 for channel_index in range(len(reader.channels)):
                     chunk = reader.get_chunk(channel_index, chunk_start, chunk_end)
