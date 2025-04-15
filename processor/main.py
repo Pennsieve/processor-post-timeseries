@@ -27,6 +27,7 @@ if __name__ == "__main__":
         for f in os.scandir(config.INPUT_DIR)
         if f.is_file() and os.path.splitext(f.name)[1].lower() == '.bdf'
     ]
+    print(input_files)
 
     assert len(input_files) == 1, "BDF post processor only supports a single file as input"
 
