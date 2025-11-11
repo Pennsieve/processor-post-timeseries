@@ -1,7 +1,8 @@
 import os
 import logging
 import pyedflib
-from datetime import datetime, timezone
+from datetime import timezone
+from annotation_extractor import *
 
 from pynwb import NWBHDF5IO
 from pynwb.ecephys import ElectricalSeries
@@ -48,3 +49,4 @@ if __name__ == "__main__":
     # easily able to handle > 3 processors
     if config.IMPORTER_ENABLED:
         importer = import_timeseries(config.API_HOST, config.API_HOST2, config.API_KEY, config.API_SECRET, config.WORKFLOW_INSTANCE_ID, config.OUTPUT_DIR)
+    extract_annotations()
