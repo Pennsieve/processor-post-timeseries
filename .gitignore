@@ -1,5 +1,6 @@
 # ignore local data directory used for running and testing the processor locally
 data
+sample_data
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
