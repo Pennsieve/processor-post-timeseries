@@ -37,8 +37,8 @@ class TimeSeriesChunkWriter:
             for chunk_start in range(contiguous_start, contiguous_end, self.chunk_size):
                 chunk_end = min(contiguous_end, chunk_start + self.chunk_size)
 
-                start_time = reader.timestamps[chunk_start]
-                end_time = reader.timestamps[chunk_end-1]
+                start_time = reader.get_timestamp(chunk_start)
+                end_time = reader.get_timestamp(chunk_end - 1)
 
                 for channel_index in range(len(reader.channels)):
                     chunk = reader.get_chunk(channel_index, chunk_start, chunk_end)

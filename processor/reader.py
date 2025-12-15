@@ -12,14 +12,15 @@ class NWBElectricalSeriesReader:
     """
     Wrapper class around the NWB ElectricalSeries object.
 
-    Provides helper functions and attributes for understanding the object's underlying sample and timeseries data
+    Provides helper functions and attributes for understanding the object's underlying sample and timeseries data.
+
+    Timestamps are computed on-demand to avoid loading the entire array into memory.
 
     Attributes:
         electrical_series (ElectricalSeries): Raw acquired data from a NWB file
         num_samples(int): Number of samples per-channel
         num_channels (int): Number of channels
         sampling_rate (int): Sampling rate (in Hz) either given by the raw file or calculated from given timestamp values
-        timestamps (int): Timestamps (offset seconds from 0) either given by the raw file or calculated from given sampling rate
         channels (list[TimeSeriesChannel]): list of channels and their respective metadata
     """
 
@@ -32,20 +33,14 @@ class NWBElectricalSeriesReader:
         assert len(self.electrical_series.electrodes.table) == self.num_channels, 'Electrode channels do not align with data shape'
 
         self._sampling_rate = None
-        self._timestamps = None
-        self._compute_sampling_rate_and_timestamps()
-
-        assert self.num_samples == len(self.timestamps), "Differing number of sample and timestamp value"
+        self._has_explicit_timestamps = False
+        self._compute_sampling_rate()
 
         self._channels = None
 
-
-    def _compute_sampling_rate_and_timestamps(self):
+    def _compute_sampling_rate(self):
         """
-        Sets the sampling_rate and timestamps properties on the reader object.
-
-        Computes either the sampling_rate or the timestamps given the other
-        is provided in the NWB file.
+        Computes and stores the sampling rate.
 
         Note: NWB specifies timestamps in seconds
 
@@ -59,35 +54,55 @@ class NWBElectricalSeriesReader:
         # if both the timestamps and rate properties are set on the electrical series
         # validate that the given rate is within a 2% margin of the rate calculated
         # off of the given timestamps
-        if self.electrical_series.rate and self.electrical_series.timestamps:
-            # validate sampling rate against timestamps
-            timestamps = self.electrical_series.timestamps
+        if self.electrical_series.rate and self.electrical_series.timestamps is not None:
+            self._has_explicit_timestamps = True
             sampling_rate = self.electrical_series.rate
 
-            inferred_sampling_rate = infer_sampling_rate(timestamps)
-            error = abs(inferred_sampling_rate-sampling_rate) * (1.0 / sampling_rate)
+            # sample a small portion of timestamps to infer rate
+            sample_size = min(10000, self.num_samples)
+            sample_timestamps = self.electrical_series.timestamps[:sample_size]
+            inferred_sampling_rate = infer_sampling_rate(sample_timestamps)
+
+            error = abs(inferred_sampling_rate - sampling_rate) * (1.0 / sampling_rate)
             if error > 0.02:
-                # error is greater than 2%
                 raise Exception("Inferred rate from timestamps ({inferred_rate:.4f}) does not match given rate ({given_rate:.4f})." \
                         .format(inferred_rate=inferred_sampling_rate, given_rate=sampling_rate))
+            self._sampling_rate = sampling_rate
 
-        # if only the rate is given, calculate the timestamps for the samples
-        # using the given number of samples (size of the data)
-        if self.electrical_series.rate:
-            sampling_rate = self.electrical_series.rate
-            timestamps = np.linspace(0, self.num_samples / sampling_rate, self.num_samples, endpoint = False)
+        # if only the rate is given, timestamps will be computed on-demand
+        elif self.electrical_series.rate:
+            self._sampling_rate = self.electrical_series.rate
+            self._has_explicit_timestamps = False
 
-        # if only the timestamps are given, calculate the sampling rate using the timestamps
-        if self.electrical_series.timestamps:
-            timestamps = self.electrical_series.timestamps
-            sampling_rate = round(infer_sampling_rate(self._timestamps))
+        # if only the timestamps are given, calculate the sampling rate using a sample
+        elif self.electrical_series.timestamps is not None:
+            self._has_explicit_timestamps = True
+            sample_size = min(10000, self.num_samples)
+            sample_timestamps = self.electrical_series.timestamps[:sample_size]
+            self._sampling_rate = round(infer_sampling_rate(sample_timestamps))
 
-        self._sampling_rate = sampling_rate
-        self._timestamps = timestamps + self.session_start_time_secs
+    def get_timestamp(self, index):
+        """
+        Get timestamp for a single sample index. Computes on-demand.
+        """
+        if self._has_explicit_timestamps:
+            return float(self.electrical_series.timestamps[index]) + self.session_start_time_secs
+        else:
+            return (index / self._sampling_rate) + self.session_start_time_secs
 
-    @property
-    def timestamps(self):
-        return self._timestamps
+    def get_timestamps(self, start, end):
+        """
+        Get timestamps for a range of indices [start, end). Returns a numpy array.
+        """
+        if self._has_explicit_timestamps:
+            return np.array(self.electrical_series.timestamps[start:end]) + self.session_start_time_secs
+        else:
+            return np.linspace(
+                start / self._sampling_rate,
+                end / self._sampling_rate,
+                end - start,
+                endpoint=False
+            ) + self.session_start_time_secs
 
     @property
     def sampling_rate(self):
@@ -97,6 +112,11 @@ class NWBElectricalSeriesReader:
     def channels(self):
         if not self._channels:
             channels = list()
+
+            # compute start/end timestamps on-demand
+            start_timestamp = self.get_timestamp(0)
+            end_timestamp = self.get_timestamp(self.num_samples - 1)
+
             for index, electrode in enumerate(self.electrical_series.electrodes):
                 name = ""
                 if isinstance(electrode, DataFrame):
@@ -118,8 +138,8 @@ class NWBElectricalSeriesReader:
                             index = index,
                             name = name,
                             rate = self.sampling_rate,
-                            start = self.timestamps[0] * 1e6 , # safe access gaurenteed by initialization assertions
-                            end = self.timestamps[-1] * 1e6,
+                            start = start_timestamp * 1e6,
+                            end = end_timestamp * 1e6,
                             group = group_name
                         )
                     )
@@ -139,13 +159,43 @@ class NWBElectricalSeriesReader:
             sampling_period = 1 / sampling_rate
 
             (timestamp_difference) > 2 * sampling_period
+
+        For data with only a sampling rate (no explicit timestamps), the entire
+        dataset is treated as one contiguous chunk.
         """
+        # if no explicit timestamps, data is continuous by definition
+        if not self._has_explicit_timestamps:
+            yield 0, self.num_samples
+            return
+
+        # process timestamps in batches to find gaps without loading all into memory
         gap_threshold = (1.0 / self.sampling_rate) * 2
+        batch_size = 100000
 
-        boundaries = np.concatenate(
-            ([0], (np.diff(self.timestamps) > gap_threshold).nonzero()[0] + 1, [len(self.timestamps)]))
+        boundaries = [0]
+        prev_timestamp = None
 
-        for i in np.arange(len(boundaries)-1):
+        for batch_start in range(0, self.num_samples, batch_size):
+            batch_end = min(batch_start + batch_size, self.num_samples)
+            batch_timestamps = self.electrical_series.timestamps[batch_start:batch_end]
+
+            # check gap between batches
+            if prev_timestamp is not None:
+                if batch_timestamps[0] - prev_timestamp > gap_threshold:
+                    boundaries.append(batch_start)
+
+            # find gaps within batch
+            diffs = np.diff(batch_timestamps)
+            gap_indices = np.where(diffs > gap_threshold)[0]
+            for gap_idx in gap_indices:
+                boundaries.append(batch_start + gap_idx + 1)
+
+            prev_timestamp = batch_timestamps[-1]
+
+        boundaries.append(self.num_samples)
+
+        # yield contiguous ranges
+        for i in range(len(boundaries) - 1):
             yield boundaries[i], boundaries[i + 1]
 
     def get_chunk(self, channel_index, start = None, end = None):
