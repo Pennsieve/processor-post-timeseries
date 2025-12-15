@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 
 from pynwb import NWBHDF5IO
 from pynwb.ecephys import ElectricalSeries
@@ -37,8 +38,11 @@ if __name__ == "__main__":
 
         chunked_writer = TimeSeriesChunkWriter(nwb.session_start_time, config.OUTPUT_DIR, chunk_size)
 
+        start = time.time()
         for series in electrical_series:
             chunked_writer.write_electrical_series(series)
+        end = time.time()
+        log.info(f"chunked writer runtime: {end - start:.4f} seconds")
 
     # import requires Pennsieve API access; when developing locally this is most often not required
     # note: this will be moved to a separated post-processor once the analysis pipeline is more

@@ -99,9 +99,9 @@ def import_timeseries(api_host, api2_host, api_key, api_secret, workflow_instanc
         )
         import_files.append(import_file)
 
-    # initialize import
+    # initialize import with batched manifest creation to avoid API Gateway size limits
     import_client = ImportClient(api2_host, session_manager)
-    import_id = import_client.create(workflow_instance.id, workflow_instance.dataset_id, package_id, import_files)
+    import_id = import_client.create_batched(workflow_instance.id, workflow_instance.dataset_id, package_id, import_files)
 
     log.info(f"import_id={import_id} initialized import with {len(import_files)} time series data files for upload")
 
