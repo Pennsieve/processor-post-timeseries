@@ -356,8 +356,7 @@ class TestParallelProcessing:
         end_time = 1.005
         channel_index = 0
 
-        args = (chunk_data, start_time, end_time, channel_index, temp_output_dir)
-        _write_channel_chunk_worker(args)
+        _write_channel_chunk_worker(chunk_data, start_time, end_time, channel_index, temp_output_dir)
 
         # Check file was created
         expected_filename = (
@@ -375,8 +374,7 @@ class TestParallelProcessing:
     def test_write_channel_chunk_worker_big_endian(self, temp_output_dir):
         """Test that worker function writes data in big-endian format."""
         chunk_data = np.array([1.5, -2.5], dtype=np.float64)
-        args = (chunk_data, 0.0, 0.001, 5, temp_output_dir)
-        _write_channel_chunk_worker(args)
+        _write_channel_chunk_worker(chunk_data, 0.0, 0.001, 5, temp_output_dir)
 
         file_path = os.path.join(temp_output_dir, "channel-00005_0_1000.bin.gz")
         with gzip.open(file_path, "rb") as f:
