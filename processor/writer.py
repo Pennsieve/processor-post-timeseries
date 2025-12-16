@@ -1,14 +1,15 @@
 import gzip
 import json
 import logging
-import numpy as np
 import os
 
+import numpy as np
 from constants import TIME_SERIES_BINARY_FILE_EXTENSION, TIME_SERIES_METADATA_FILE_EXTENSION
 from reader import NWBElectricalSeriesReader
 from utils import to_big_endian
 
 log = logging.getLogger()
+
 
 class TimeSeriesChunkWriter:
     """
@@ -38,7 +39,7 @@ class TimeSeriesChunkWriter:
                 chunk_end = min(contiguous_end, chunk_start + self.chunk_size)
 
                 start_time = reader.timestamps[chunk_start]
-                end_time = reader.timestamps[chunk_end-1]
+                end_time = reader.timestamps[chunk_end - 1]
 
                 for channel_index in range(len(reader.channels)):
                     chunk = reader.get_chunk(channel_index, chunk_start, chunk_end)
@@ -55,18 +56,20 @@ class TimeSeriesChunkWriter:
         Writes the chunked sample data to a gzipped binary file.
         """
         # ensure the samples are 64-bit float-pointing numbers in big-endian before converting to bytes
-        formatted_data = to_big_endian(chunk.astype(np.float64)) 
+        formatted_data = to_big_endian(chunk.astype(np.float64))
 
-        channel_index = '{index:05d}'.format(index=channel.index)
-        file_name = "channel-{}_{}_{}{}".format(channel_index, int(start_time * 1e6), int(end_time * 1e6), TIME_SERIES_BINARY_FILE_EXTENSION)
+        channel_index = "{index:05d}".format(index=channel.index)
+        file_name = "channel-{}_{}_{}{}".format(
+            channel_index, int(start_time * 1e6), int(end_time * 1e6), TIME_SERIES_BINARY_FILE_EXTENSION
+        )
         file_path = os.path.join(self.output_dir, file_name)
 
-        with gzip.open(file_path, mode='wb', compresslevel=1) as f:
+        with gzip.open(file_path, mode="wb", compresslevel=1) as f:
             f.write(formatted_data)
 
     def write_channel(self, channel):
-        file_name = f'channel-{channel.index:05d}{TIME_SERIES_METADATA_FILE_EXTENSION}'
+        file_name = f"channel-{channel.index:05d}{TIME_SERIES_METADATA_FILE_EXTENSION}"
         file_path = os.path.join(self.output_dir, file_name)
 
-        with open(file_path, 'w') as file:
+        with open(file_path, "w") as file:
             json.dump(channel.as_dict(), file)

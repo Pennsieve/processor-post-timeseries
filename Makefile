@@ -1,14 +1,49 @@
-.PHONY: help test run
+.PHONY: help run clean venv install test test-cov lint pre-commit
 
 SERVICE_NAME  ?= "processor-post-timeseries"
+VENV_DIR      ?= venv
+PYTHON        ?= python3
 
 .DEFAULT: help
 
 help:
 	@echo "Make Help for $(SERVICE_NAME)"
 	@echo ""
-	@echo "make run     - run the processor locally via docker-compose"
-	@echo "make clean   - remove all files from locally mounted input / output directories"
+	@echo "make venv       - create virtual environment and install all dependencies"
+	@echo "make install    - install dependencies into existing venv"
+	@echo "make pre-commit - install pre-commit hooks"
+	@echo "make test       - run tests"
+	@echo "make test-cov   - run tests with coverage report"
+	@echo "make lint       - run linter with auto-fix"
+	@echo "make run        - run the processor locally via docker-compose"
+	@echo "make clean      - remove all files from locally mounted input / output directories"
+
+venv:
+	$(PYTHON) -m venv $(VENV_DIR)
+	$(VENV_DIR)/bin/pip install --upgrade pip
+	$(VENV_DIR)/bin/pip install -r processor/requirements.txt
+	$(VENV_DIR)/bin/pip install -r requirements-test.txt
+	@echo ""
+	@echo "Virtual environment created. Activate with:"
+	@echo "  source $(VENV_DIR)/bin/activate"
+
+install:
+	$(VENV_DIR)/bin/pip install --upgrade pip
+	$(VENV_DIR)/bin/pip install -r processor/requirements.txt
+	$(VENV_DIR)/bin/pip install -r requirements-test.txt
+
+test:
+	$(VENV_DIR)/bin/python -m pytest tests/ -v
+
+test-cov:
+	$(VENV_DIR)/bin/python -m pytest tests/ -v --cov=processor --cov-report=term-missing
+
+lint:
+	$(VENV_DIR)/bin/ruff check --fix processor/ tests/
+	$(VENV_DIR)/bin/ruff format processor/ tests/
+
+pre-commit:
+	$(VENV_DIR)/bin/pre-commit install
 
 run:
 	docker-compose -f docker-compose.yml down --remove-orphans
