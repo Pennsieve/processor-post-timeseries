@@ -9,6 +9,7 @@ from .base_client import BaseClient
 log = logging.getLogger()
 
 MAX_REQUEST_SIZE_BYTES = 1 * 1024 * 1024  # AWS API Gateway payload limit of 10MB
+DEFAULT_BATCH_SIZE = 1000  # Default batch size when file list is empty
 
 
 class ImportFile:

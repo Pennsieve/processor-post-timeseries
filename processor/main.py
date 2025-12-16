@@ -27,7 +27,7 @@ if __name__ == "__main__":
 
     with NWBHDF5IO(input_files[0], mode="r") as io:
         nwb = io.read()
-        electrical_series = [acq for acq in nwb.acquisition.values() if type(acq) == ElectricalSeries]
+        electrical_series = [acq for acq in nwb.acquisition.values() if isinstance(acq, ElectricalSeries)]
         if len(electrical_series) < 1:
             log.error("NWB file has no continuous raw electrical series data")
         if len(electrical_series) > 1:
