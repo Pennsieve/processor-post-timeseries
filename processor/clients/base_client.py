@@ -3,6 +3,7 @@ import logging
 
 log = logging.getLogger()
 
+
 # encapsulates a shared API session and re-authentication functionality
 class SessionManager:
     def __init__(self, authentication_client, api_key, api_secret):
@@ -22,6 +23,7 @@ class SessionManager:
     def refresh_session(self):
         self.__session_token = self.authentication_client.authenticate(self.api_key, self.api_secret)
 
+
 class BaseClient:
     def __init__(self, session_manager):
         self.session_manager = session_manager
@@ -36,4 +38,5 @@ class BaseClient:
                     self.session_manager.refresh_session()
                     return func(self, *args, **kwargs)
                 raise
+
         return wrapper

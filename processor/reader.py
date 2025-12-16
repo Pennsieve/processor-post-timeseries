@@ -8,6 +8,7 @@ from utils import infer_sampling_rate
 
 log = logging.getLogger()
 
+
 class NWBElectricalSeriesReader:
     """
     Wrapper class around the NWB ElectricalSeries object.
@@ -28,8 +29,10 @@ class NWBElectricalSeriesReader:
         self.session_start_time_secs = session_start_time.timestamp()
         self.num_samples, self.num_channels = self.electrical_series.data.shape
 
-        assert self.num_samples > 0, 'Electrical series has no sample data'
-        assert len(self.electrical_series.electrodes.table) == self.num_channels, 'Electrode channels do not align with data shape'
+        assert self.num_samples > 0, "Electrical series has no sample data"
+        assert len(self.electrical_series.electrodes.table) == self.num_channels, (
+            "Electrode channels do not align with data shape"
+        )
 
         self._sampling_rate = None
         self._timestamps = None
@@ -38,7 +41,6 @@ class NWBElectricalSeriesReader:
         assert self.num_samples == len(self.timestamps), "Differing number of sample and timestamp value"
 
         self._channels = None
-
 
     def _compute_sampling_rate_and_timestamps(self):
         """
@@ -65,17 +67,20 @@ class NWBElectricalSeriesReader:
             sampling_rate = self.electrical_series.rate
 
             inferred_sampling_rate = infer_sampling_rate(timestamps)
-            error = abs(inferred_sampling_rate-sampling_rate) * (1.0 / sampling_rate)
+            error = abs(inferred_sampling_rate - sampling_rate) * (1.0 / sampling_rate)
             if error > 0.02:
                 # error is greater than 2%
-                raise Exception("Inferred rate from timestamps ({inferred_rate:.4f}) does not match given rate ({given_rate:.4f})." \
-                        .format(inferred_rate=inferred_sampling_rate, given_rate=sampling_rate))
+                raise Exception(
+                    "Inferred rate from timestamps ({inferred_rate:.4f}) does not match given rate ({given_rate:.4f}).".format(
+                        inferred_rate=inferred_sampling_rate, given_rate=sampling_rate
+                    )
+                )
 
         # if only the rate is given, calculate the timestamps for the samples
         # using the given number of samples (size of the data)
         if self.electrical_series.rate:
             sampling_rate = self.electrical_series.rate
-            timestamps = np.linspace(0, self.num_samples / sampling_rate, self.num_samples, endpoint = False)
+            timestamps = np.linspace(0, self.num_samples / sampling_rate, self.num_samples, endpoint=False)
 
         # if only the timestamps are given, calculate the sampling rate using the timestamps
         if self.electrical_series.timestamps:
@@ -100,10 +105,10 @@ class NWBElectricalSeriesReader:
             for index, electrode in enumerate(self.electrical_series.electrodes):
                 name = ""
                 if isinstance(electrode, DataFrame):
-                    if 'channel_name' in electrode:
-                        name = electrode['channel_name']
-                    elif 'label' in electrode:
-                        name = electrode['label']
+                    if "channel_name" in electrode:
+                        name = electrode["channel_name"]
+                    elif "label" in electrode:
+                        name = electrode["label"]
 
                 if isinstance(name, Series):
                     name = name.iloc[0]
@@ -113,16 +118,16 @@ class NWBElectricalSeriesReader:
                     group_name = group_name.iloc[0]
 
                 channels.append(
-                        # convert start / end to microseconds to maintain precision
-                        TimeSeriesChannel(
-                            index = index,
-                            name = name,
-                            rate = self.sampling_rate,
-                            start = self.timestamps[0] * 1e6 , # safe access gaurenteed by initialization assertions
-                            end = self.timestamps[-1] * 1e6,
-                            group = group_name
-                        )
+                    # convert start / end to microseconds to maintain precision
+                    TimeSeriesChannel(
+                        index=index,
+                        name=name,
+                        rate=self.sampling_rate,
+                        start=self.timestamps[0] * 1e6,  # safe access gaurenteed by initialization assertions
+                        end=self.timestamps[-1] * 1e6,
+                        group=group_name,
                     )
+                )
 
             self._channels = channels
 
@@ -143,12 +148,13 @@ class NWBElectricalSeriesReader:
         gap_threshold = (1.0 / self.sampling_rate) * 2
 
         boundaries = np.concatenate(
-            ([0], (np.diff(self.timestamps) > gap_threshold).nonzero()[0] + 1, [len(self.timestamps)]))
+            ([0], (np.diff(self.timestamps) > gap_threshold).nonzero()[0] + 1, [len(self.timestamps)])
+        )
 
-        for i in np.arange(len(boundaries)-1):
+        for i in np.arange(len(boundaries) - 1):
             yield boundaries[i], boundaries[i + 1]
 
-    def get_chunk(self, channel_index, start = None, end = None):
+    def get_chunk(self, channel_index, start=None, end=None):
         """
         Returns a chunk of sample data from the electrical series
         for the given channel (index)

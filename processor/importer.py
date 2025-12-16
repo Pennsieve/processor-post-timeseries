@@ -19,7 +19,7 @@ from timeseries_channel import TimeSeriesChannel
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Value, Lock
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 log = logging.getLogger()
 
@@ -30,6 +30,7 @@ for import into Pennsieve data ecosystem.
 # note: this will be moved to a separated post-processor once the analysis pipeline is more
 # easily able to handle > 3 processors
 """
+
 
 def import_timeseries(api_host, api2_host, api_key, api_secret, workflow_instance_id, file_directory):
     # gather all the time series files from the output directory
@@ -53,7 +54,7 @@ def import_timeseries(api_host, api2_host, api_key, api_secret, workflow_instanc
 
     # fetch workflow instance for parameters (dataset_id, package_id, etc.)
     workflow_client = WorkflowClient(api2_host, session_manager)
-    workflow_instance  = workflow_client.get_workflow_instance(workflow_instance_id)
+    workflow_instance = workflow_client.get_workflow_instance(workflow_instance_id)
 
     # constraint until we implement (upstream) performing imports over directories
     # and specifying how to group time series files together into an imported package
@@ -72,10 +73,12 @@ def import_timeseries(api_host, api2_host, api_key, api_secret, workflow_instanc
     for file_path in timeseries_channel_files:
         channel_index = channel_index_pattern.search(os.path.basename(file_path)).group(1)
 
-        with open(file_path, 'r') as file:
+        with open(file_path, "r") as file:
             local_channel = TimeSeriesChannel.from_dict(json.load(file))
 
-        channel = next((existing_channel for existing_channel in existing_channels if existing_channel == local_channel), None)
+        channel = next(
+            (existing_channel for existing_channel in existing_channels if existing_channel == local_channel), None
+        )
         if channel is not None:
             log.info(f"package_id={package_id} channel_id={channel.id} found existing package channel: {channel.name}")
         else:
@@ -95,40 +98,45 @@ def import_timeseries(api_host, api2_host, api_key, api_secret, workflow_instanc
         import_file = ImportFile(
             upload_key=uuid.uuid4(),
             file_path=re.sub(channel_index_pattern, channel.id, os.path.basename(file_path)),
-            local_path = file_path
+            local_path=file_path,
         )
         import_files.append(import_file)
 
     # initialize import with batched manifest creation to avoid API Gateway size limits
     import_client = ImportClient(api2_host, session_manager)
-    import_id = import_client.create_batched(workflow_instance.id, workflow_instance.dataset_id, package_id, import_files)
+    import_id = import_client.create_batched(
+        workflow_instance.id, workflow_instance.dataset_id, package_id, import_files
+    )
 
     log.info(f"import_id={import_id} initialized import with {len(import_files)} time series data files for upload")
 
     # track time series file upload count
-    upload_counter = Value('i', 0)
+    upload_counter = Value("i", 0)
     upload_counter_lock = Lock()
 
     # upload time series files to Pennsieve S3 import bucket
-    @backoff.on_exception(
-        backoff.expo,
-        requests.exceptions.RequestException,
-        max_tries=5
-    )
+    @backoff.on_exception(backoff.expo, requests.exceptions.RequestException, max_tries=5)
     def upload_timeseries_file(timeseries_file):
         try:
             with upload_counter_lock:
                 upload_counter.value += 1
-                log.info(f"import_id={import_id} upload_key={timeseries_file.upload_key} uploading {upload_counter.value}/{len(import_files)} {timeseries_file.local_path}")
-            upload_url = import_client.get_presign_url(import_id, workflow_instance.dataset_id, timeseries_file.upload_key)
-            with open(timeseries_file.local_path, 'rb') as f:
+                log.info(
+                    f"import_id={import_id} upload_key={timeseries_file.upload_key} uploading {upload_counter.value}/{len(import_files)} {timeseries_file.local_path}"
+                )
+            upload_url = import_client.get_presign_url(
+                import_id, workflow_instance.dataset_id, timeseries_file.upload_key
+            )
+            with open(timeseries_file.local_path, "rb") as f:
                 response = requests.put(upload_url, data=f)
                 response.raise_for_status()  # raise an error if the request failed
             return True
         except Exception as e:
             with upload_counter_lock:
                 upload_counter.value -= 1
-            log.error(f"import_id={import_id} upload_key={timeseries_file.upload_key} failed to upload {timeseries_file.local_path}: %s", e)
+            log.error(
+                f"import_id={import_id} upload_key={timeseries_file.upload_key} failed to upload {timeseries_file.local_path}: %s",
+                e,
+            )
             raise e
 
     successful_uploads = list()

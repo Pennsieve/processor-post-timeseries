@@ -1,4 +1,4 @@
-.PHONY: help test run
+.PHONY: help run clean test test-coverage
 
 SERVICE_NAME  ?= "processor-post-timeseries"
 
@@ -7,8 +7,10 @@ SERVICE_NAME  ?= "processor-post-timeseries"
 help:
 	@echo "Make Help for $(SERVICE_NAME)"
 	@echo ""
-	@echo "make run     - run the processor locally via docker-compose"
-	@echo "make clean   - remove all files from locally mounted input / output directories"
+	@echo "make run           - run the processor locally via docker-compose"
+	@echo "make clean         - remove all files from locally mounted input / output directories"
+	@echo "make test          - run tests"
+	@echo "make test-coverage - run tests with code coverage reporting"
 
 run:
 	docker-compose -f docker-compose.yml down --remove-orphans
@@ -18,3 +20,9 @@ run:
 clean:
 	rm -f data/input/*
 	rm -f data/output/*
+
+test:
+	source venv/bin/activate && python -m pytest tests/ -v
+
+test-coverage:
+	source venv/bin/activate && python -m pytest tests/ --cov=processor --cov-report=term-missing

@@ -49,6 +49,9 @@ coverage.xml
 .pytest_cache/
 cover/
 
+# Virtualenv
+venv/
+
 # Swap
 [._]*.s[a-v][a-z]
 [._]*.sw[a-p]

@@ -7,15 +7,18 @@ from .base_client import BaseClient
 
 log = logging.getLogger()
 
-MAX_REQUEST_SIZE_BYTES = 10 * 1024 * 1024  # AWS API Gateway payload limit of 10MB
+MAX_REQUEST_SIZE_BYTES = 1 * 1024 * 1024  # AWS API Gateway payload limit of 10MB
+
 
 class ImportFile:
     def __init__(self, upload_key, file_path, local_path):
-        self.upload_key=upload_key
-        self.file_path=file_path
+        self.upload_key = upload_key
+        self.file_path = file_path
         self.local_path = local_path
+
     def __repr__(self):
         return f"ImportFile(upload_key={self.upload_key}, file_path={self.file_path}, local_path={self.local_path})"
+
 
 class ImportClient(BaseClient):
     def __init__(self, api_host, session_manager):
@@ -27,16 +30,13 @@ class ImportClient(BaseClient):
     def create(self, integration_id, dataset_id, package_id, timeseries_files):
         url = f"{self.api_host}/import?dataset_id={dataset_id}"
 
-        headers = {
-            "Content-type": "application/json",
-            "Authorization": f"Bearer {self.session_manager.session_token}"
-        }
+        headers = {"Content-type": "application/json", "Authorization": f"Bearer {self.session_manager.session_token}"}
 
         body = {
             "integration_id": integration_id,
             "package_id": package_id,
             "import_type": "timeseries",
-            "files": [{"upload_key": str(file.upload_key), "file_path": file.file_path} for file in timeseries_files]
+            "files": [{"upload_key": str(file.upload_key), "file_path": file.file_path} for file in timeseries_files],
         }
 
         try:
@@ -44,7 +44,7 @@ class ImportClient(BaseClient):
             response.raise_for_status()
             data = response.json()
 
-            return data['id']
+            return data["id"]
         except requests.HTTPError as e:
             log.error(f"failed to create import with error: {e}")
             raise e
@@ -70,10 +70,7 @@ class ImportClient(BaseClient):
         """
         url = f"{self.api_host}/import/{import_id}/files?dataset_id={dataset_id}"
 
-        headers = {
-            "Content-type": "application/json",
-            "Authorization": f"Bearer {self.session_manager.session_token}"
-        }
+        headers = {"Content-type": "application/json", "Authorization": f"Bearer {self.session_manager.session_token}"}
 
         body = {
             "files": [{"upload_key": str(file.upload_key), "file_path": file.file_path} for file in timeseries_files]
@@ -117,7 +114,9 @@ class ImportClient(BaseClient):
         total_files = len(timeseries_files)
         total_batches = math.ceil(total_files / batch_size)
 
-        log.info(f"dataset_id={dataset_id} creating import manifest with {total_files} files in {total_batches} batch(es) (batch_size={batch_size})")
+        log.info(
+            f"dataset_id={dataset_id} creating import manifest with {total_files} files in {total_batches} batch(es) (batch_size={batch_size})"
+        )
 
         first_batch = timeseries_files[:batch_size]
         import_id = self.create(integration_id, dataset_id, package_id, first_batch)
@@ -138,10 +137,7 @@ class ImportClient(BaseClient):
     def get_presign_url(self, import_id, dataset_id, upload_key):
         url = f"{self.api_host}/import/{import_id}/upload/{upload_key}/presign?dataset_id={dataset_id}"
 
-        headers = {
-            "Content-type": "application/json",
-            "Authorization": f"Bearer {self.session_manager.session_token}"
-        }
+        headers = {"Content-type": "application/json", "Authorization": f"Bearer {self.session_manager.session_token}"}
 
         try:
             response = requests.get(url, headers=headers)
@@ -158,6 +154,7 @@ class ImportClient(BaseClient):
         except Exception as e:
             log.error(f"failed to generate pre-sign URL for import file with error: {e}")
             raise e
+
 
 def calculate_batch_size(sample_files, max_size_bytes=MAX_REQUEST_SIZE_BYTES):
     """
@@ -184,7 +181,7 @@ def calculate_batch_size(sample_files, max_size_bytes=MAX_REQUEST_SIZE_BYTES):
 
     # calculate batch size with safety margin (80% of limit)
     # to allow for request content overhead
-    usable_size = (max_size_bytes * 0.8)
+    usable_size = max_size_bytes * 0.8
     batch_size = int(usable_size / avg_bytes_per_file)
 
     # Ensure at least 1 file per batch
