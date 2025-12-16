@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 from constants import TIME_SERIES_BINARY_FILE_EXTENSION, TIME_SERIES_METADATA_FILE_EXTENSION
 from timeseries_channel import TimeSeriesChannel
-from writer import TimeSeriesChunkWriter
+from writer import TimeSeriesChunkWriter, _write_channel_chunk_worker
 
 
 class TestTimeSeriesChunkWriterInit:
@@ -189,6 +189,7 @@ class TestWriteElectricalSeries:
         mock_reader.timestamps = np.linspace(0, 0.5, 500, endpoint=False)
         mock_reader.contiguous_chunks.return_value = [(0, 500)]
         mock_reader.get_chunk.return_value = np.random.randn(500).astype(np.float64)
+        mock_reader.get_timestamp.side_effect = lambda idx: float(idx) / 1000.0
 
         with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
             mock_series = Mock()
@@ -215,6 +216,7 @@ class TestWriteElectricalSeries:
         mock_reader.timestamps = np.linspace(0, 0.25, 250, endpoint=False)
         mock_reader.contiguous_chunks.return_value = [(0, 250)]
         mock_reader.get_chunk.return_value = np.random.randn(100).astype(np.float64)
+        mock_reader.get_timestamp.side_effect = lambda idx: float(idx) / 1000.0
 
         with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
             mock_series = Mock()
@@ -241,6 +243,7 @@ class TestWriteElectricalSeries:
         mock_reader.timestamps = np.concatenate([timestamps_seg1, timestamps_seg2])
         mock_reader.contiguous_chunks.return_value = [(0, 100), (100, 200)]
         mock_reader.get_chunk.return_value = np.random.randn(100).astype(np.float64)
+        mock_reader.get_timestamp.side_effect = lambda idx: float(idx) / 1000.0
 
         with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
             mock_series = Mock()
@@ -259,9 +262,11 @@ class TestWriteElectricalSeries:
         mock_reader = Mock()
         mock_reader.channels = [TimeSeriesChannel(index=0, name="Ch0", rate=1000.0, start=0, end=1000)]
         # 100 samples at 1000 Hz = 0.1 seconds
-        mock_reader.timestamps = np.linspace(1.0, 1.1, 100, endpoint=False)
+        timestamps = np.linspace(1.0, 1.1, 100, endpoint=False)
+        mock_reader.timestamps = timestamps
         mock_reader.contiguous_chunks.return_value = [(0, 100)]
         mock_reader.get_chunk.return_value = np.random.randn(50).astype(np.float64)
+        mock_reader.get_timestamp.side_effect = lambda idx: float(timestamps[idx])
 
         with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
             mock_series = Mock()
@@ -339,3 +344,128 @@ class TestWriteChunkEdgeCases:
         assert np.isinf(result[0]) and result[0] > 0
         assert np.isinf(result[1]) and result[1] < 0
         assert np.isnan(result[2])
+
+
+class TestParallelProcessing:
+    """Tests for parallel channel processing functionality."""
+
+    def test_write_channel_chunk_worker(self, temp_output_dir):
+        """Test the worker function directly."""
+        chunk_data = np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float64)
+        start_time = 1.0
+        end_time = 1.005
+        channel_index = 0
+
+        args = (chunk_data, start_time, end_time, channel_index, temp_output_dir)
+        _write_channel_chunk_worker(args)
+
+        # Check file was created
+        expected_filename = (
+            f"channel-00000_{int(start_time * 1e6)}_{int(end_time * 1e6)}{TIME_SERIES_BINARY_FILE_EXTENSION}"
+        )
+        file_path = os.path.join(temp_output_dir, expected_filename)
+        assert os.path.exists(file_path)
+
+        # Verify data integrity
+        with gzip.open(file_path, "rb") as f:
+            data = f.read()
+        result = np.frombuffer(data, dtype=">f8")
+        np.testing.assert_array_equal(result, [1.0, 2.0, 3.0, 4.0, 5.0])
+
+    def test_write_channel_chunk_worker_big_endian(self, temp_output_dir):
+        """Test that worker function writes data in big-endian format."""
+        chunk_data = np.array([1.5, -2.5], dtype=np.float64)
+        args = (chunk_data, 0.0, 0.001, 5, temp_output_dir)
+        _write_channel_chunk_worker(args)
+
+        file_path = os.path.join(temp_output_dir, "channel-00005_0_1000.bin.gz")
+        with gzip.open(file_path, "rb") as f:
+            data = f.read()
+
+        result = np.frombuffer(data, dtype=">f8")
+        np.testing.assert_array_equal(result, [1.5, -2.5])
+
+    def test_parallel_processing_many_channels(self, temp_output_dir, session_start_time):
+        """Test parallel processing with many channels (typical neuroscience scenario)."""
+        num_channels = 64
+        writer = TimeSeriesChunkWriter(session_start_time, temp_output_dir, chunk_size=1000)
+
+        mock_reader = Mock()
+        mock_reader.channels = [
+            TimeSeriesChannel(index=i, name=f"Ch{i}", rate=30000.0, start=0, end=1000) for i in range(num_channels)
+        ]
+        mock_reader.contiguous_chunks.return_value = [(0, 500)]
+        mock_reader.get_chunk.return_value = np.random.randn(500).astype(np.float64)
+        mock_reader.get_timestamp.side_effect = lambda idx: float(idx) / 30000.0
+
+        with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
+            mock_series = Mock()
+            writer.write_electrical_series(mock_series)
+
+        files = os.listdir(temp_output_dir)
+        bin_files = [f for f in files if f.endswith(".bin.gz")]
+        json_files = [f for f in files if f.endswith(".metadata.json")]
+
+        # Should have 64 binary files (1 chunk x 64 channels)
+        assert len(bin_files) == num_channels
+        # Should have 64 metadata files
+        assert len(json_files) == num_channels
+
+    def test_parallel_processing_with_max_workers(self, temp_output_dir, session_start_time):
+        """Test that max_workers parameter is respected."""
+        writer = TimeSeriesChunkWriter(session_start_time, temp_output_dir, chunk_size=1000)
+
+        mock_reader = Mock()
+        mock_reader.channels = [
+            TimeSeriesChannel(index=i, name=f"Ch{i}", rate=1000.0, start=0, end=1000) for i in range(8)
+        ]
+        mock_reader.contiguous_chunks.return_value = [(0, 500)]
+        mock_reader.get_chunk.return_value = np.random.randn(500).astype(np.float64)
+        mock_reader.get_timestamp.side_effect = lambda idx: float(idx) / 1000.0
+
+        with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
+            mock_series = Mock()
+            # Limit to 2 workers
+            writer.write_electrical_series(mock_series, max_workers=2)
+
+        files = os.listdir(temp_output_dir)
+        bin_files = [f for f in files if f.endswith(".bin.gz")]
+
+        # Should still produce correct output
+        assert len(bin_files) == 8
+
+    def test_parallel_processing_data_integrity(self, temp_output_dir, session_start_time):
+        """Test that parallel processing maintains data integrity across channels."""
+        num_channels = 4
+        writer = TimeSeriesChunkWriter(session_start_time, temp_output_dir, chunk_size=100)
+
+        # Create distinct data for each channel
+        channel_data = {i: np.arange(100, dtype=np.float64) + i * 1000 for i in range(num_channels)}
+
+        mock_reader = Mock()
+        mock_reader.channels = [
+            TimeSeriesChannel(index=i, name=f"Ch{i}", rate=1000.0, start=0, end=1000) for i in range(num_channels)
+        ]
+        mock_reader.contiguous_chunks.return_value = [(0, 100)]
+        mock_reader.get_chunk.side_effect = lambda ch_idx, start, end: channel_data[ch_idx]
+        mock_reader.get_timestamp.side_effect = lambda idx: float(idx) / 1000.0
+
+        with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
+            mock_series = Mock()
+            writer.write_electrical_series(mock_series)
+
+        # Verify each channel's data
+        for i in range(num_channels):
+            file_pattern = f"channel-{i:05d}_"
+            matching_files = [
+                f for f in os.listdir(temp_output_dir) if f.startswith(file_pattern) and f.endswith(".bin.gz")
+            ]
+            assert len(matching_files) == 1
+
+            file_path = os.path.join(temp_output_dir, matching_files[0])
+            with gzip.open(file_path, "rb") as f:
+                data = f.read()
+
+            result = np.frombuffer(data, dtype=">f8")
+            expected = np.arange(100, dtype=np.float64) + i * 1000
+            np.testing.assert_array_equal(result, expected)
