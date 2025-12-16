@@ -1,12 +1,12 @@
 import logging
-import numpy as np
 
+import numpy as np
 from pandas import DataFrame, Series
-from pynwb.ecephys import ElectricalSeries
 from timeseries_channel import TimeSeriesChannel
 from utils import infer_sampling_rate
 
 log = logging.getLogger()
+
 
 class NWBElectricalSeriesReader:
     """
@@ -29,8 +29,10 @@ class NWBElectricalSeriesReader:
         self.session_start_time_secs = session_start_time.timestamp()
         self.num_samples, self.num_channels = self.electrical_series.data.shape
 
-        assert self.num_samples > 0, 'Electrical series has no sample data'
-        assert len(self.electrical_series.electrodes.table) == self.num_channels, 'Electrode channels do not align with data shape'
+        assert self.num_samples > 0, "Electrical series has no sample data"
+        assert (
+            len(self.electrical_series.electrodes.table) == self.num_channels
+        ), "Electrode channels do not align with data shape"
 
         self._sampling_rate = None
         self._has_explicit_timestamps = False
@@ -64,8 +66,11 @@ class NWBElectricalSeriesReader:
 
             error = abs(inferred_sampling_rate - sampling_rate) * (1.0 / sampling_rate)
             if error > 0.02:
-                raise Exception("Inferred rate from timestamps ({inferred_rate:.4f}) does not match given rate ({given_rate:.4f})." \
-                        .format(inferred_rate=inferred_sampling_rate, given_rate=sampling_rate))
+                raise Exception(
+                    "Inferred rate from timestamps ({inferred_rate:.4f}) does not match given rate ({given_rate:.4f}).".format(
+                        inferred_rate=inferred_sampling_rate, given_rate=sampling_rate
+                    )
+                )
             self._sampling_rate = sampling_rate
 
         # if only the rate is given, timestamps will be computed on-demand
@@ -117,7 +122,7 @@ class NWBElectricalSeriesReader:
     @property
     def channels(self):
         if not self._channels:
-            channels = list()
+            channels = []
 
             start_timestamp = self.get_timestamp(0)
             end_timestamp = self.get_timestamp(self.num_samples - 1)
@@ -125,10 +130,10 @@ class NWBElectricalSeriesReader:
             for index, electrode in enumerate(self.electrical_series.electrodes):
                 name = ""
                 if isinstance(electrode, DataFrame):
-                    if 'channel_name' in electrode:
-                        name = electrode['channel_name']
-                    elif 'label' in electrode:
-                        name = electrode['label']
+                    if "channel_name" in electrode:
+                        name = electrode["channel_name"]
+                    elif "label" in electrode:
+                        name = electrode["label"]
 
                 if isinstance(name, Series):
                     name = name.iloc[0]
@@ -138,16 +143,16 @@ class NWBElectricalSeriesReader:
                     group_name = group_name.iloc[0]
 
                 channels.append(
-                        # convert start / end to microseconds to maintain precision
-                        TimeSeriesChannel(
-                            index = index,
-                            name = name,
-                            rate = self.sampling_rate,
-                            start = start_timestamp * 1e6,
-                            end = end_timestamp * 1e6,
-                            group = group_name
-                        )
+                    # convert start / end to microseconds to maintain precision
+                    TimeSeriesChannel(
+                        index=index,
+                        name=name,
+                        rate=self.sampling_rate,
+                        start=start_timestamp * 1e6,
+                        end=end_timestamp * 1e6,
+                        group=group_name,
                     )
+                )
 
             self._channels = channels
 
@@ -199,7 +204,7 @@ class NWBElectricalSeriesReader:
         for i in range(len(boundaries) - 1):
             yield boundaries[i], boundaries[i + 1]
 
-    def get_chunk(self, channel_index, start = None, end = None):
+    def get_chunk(self, channel_index, start=None, end=None):
         """
         Returns a chunk of sample data from the electrical series
         for the given channel (index)

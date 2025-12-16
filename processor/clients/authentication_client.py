@@ -1,9 +1,11 @@
-import boto3
-import requests
 import json
 import logging
 
+import boto3
+import requests
+
 log = logging.getLogger()
+
 
 class AuthenticationClient:
     def __init__(self, api_host):
@@ -28,9 +30,9 @@ class AuthenticationClient:
             )
 
             login_response = cognito_idp_client.initiate_auth(
-              AuthFlow="USER_PASSWORD_AUTH",
-              AuthParameters={"USERNAME": api_key, "PASSWORD": api_secret},
-              ClientId=cognito_app_client_id,
+                AuthFlow="USER_PASSWORD_AUTH",
+                AuthParameters={"USERNAME": api_key, "PASSWORD": api_secret},
+                ClientId=cognito_app_client_id,
             )
 
             access_token = login_response["AuthenticationResult"]["AccessToken"]

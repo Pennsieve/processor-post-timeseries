@@ -1,11 +1,14 @@
-import requests
 import json
 import logging
 
-from .base_client import BaseClient
+import requests
+
 from processor.timeseries_channel import TimeSeriesChannel
 
+from .base_client import BaseClient
+
 log = logging.getLogger()
+
 
 class TimeSeriesClient(BaseClient):
     def __init__(self, api_host, session_manager):
@@ -17,19 +20,16 @@ class TimeSeriesClient(BaseClient):
     def create_channel(self, package_id, channel):
         url = f"{self.api_host}/timeseries/{package_id}/channels"
 
-        headers = {
-            "Content-type": "application/json",
-            "Authorization": f"Bearer {self.session_manager.session_token}"
-        }
+        headers = {"Content-type": "application/json", "Authorization": f"Bearer {self.session_manager.session_token}"}
 
         body = channel.as_dict()
-        body['channelType'] = body.pop('type')
+        body["channelType"] = body.pop("type")
 
         try:
             response = requests.post(url, headers=headers, json=body)
             response.raise_for_status()
             data = response.json()
-            created_channel = TimeSeriesChannel.from_dict(data['content'], data['properties'])
+            created_channel = TimeSeriesChannel.from_dict(data["content"], data["properties"])
             created_channel.index = channel.index
 
             return created_channel
@@ -47,10 +47,7 @@ class TimeSeriesClient(BaseClient):
     def get_package_channels(self, package_id):
         url = f"{self.api_host}/timeseries/{package_id}/channels"
 
-        headers = {
-            "Content-type": "application/json",
-            "Authorization": f"Bearer {self.session_manager.session_token}"
-        }
+        headers = {"Content-type": "application/json", "Authorization": f"Bearer {self.session_manager.session_token}"}
 
         try:
             response = requests.get(url, headers=headers)

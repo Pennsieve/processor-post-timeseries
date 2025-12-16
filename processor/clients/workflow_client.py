@@ -1,16 +1,19 @@
-import requests
 import json
 import logging
+
+import requests
 
 from .base_client import BaseClient
 
 log = logging.getLogger()
+
 
 class WorkflowInstance:
     def __init__(self, id, dataset_id, package_ids):
         self.id = id
         self.dataset_id = dataset_id
         self.package_ids = package_ids
+
 
 class WorkflowClient(BaseClient):
     def __init__(self, api_host, session_manager):
@@ -24,10 +27,7 @@ class WorkflowClient(BaseClient):
     def get_workflow_instance(self, workflow_instance_id):
         url = f"{self.api_host}/workflows/instances/{workflow_instance_id}"
 
-        headers = {
-            "Accept": "application/json",
-            "Authorization": f"Bearer {self.session_manager.session_token}"
-        }
+        headers = {"Accept": "application/json", "Authorization": f"Bearer {self.session_manager.session_token}"}
 
         try:
             response = requests.get(url, headers=headers)
