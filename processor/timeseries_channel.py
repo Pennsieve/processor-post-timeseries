@@ -1,5 +1,3 @@
-
-
 class TimeSeriesChannel:
     def __init__(
         self,

@@ -27,14 +27,14 @@ from pynwb.ecephys import ElectricalSeries
 def parse_size(size_str: str) -> int:
     """Parse a human-readable size string into bytes."""
     units = {
-        'B': 1,
-        'KB': 1024,
-        'MB': 1024 ** 2,
-        'GB': 1024 ** 3,
-        'TB': 1024 ** 4,
+        "B": 1,
+        "KB": 1024,
+        "MB": 1024**2,
+        "GB": 1024**3,
+        "TB": 1024**4,
     }
 
-    match = re.match(r'^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB)$', size_str.upper().strip())
+    match = re.match(r"^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB)$", size_str.upper().strip())
     if not match:
         raise ValueError(f"Invalid size format: '{size_str}'. Use format like '10MB', '1GB', '50GB'")
 
@@ -61,8 +61,9 @@ def calculate_samples_for_size(target_bytes: int, num_channels: int = 2) -> int:
     return max(num_samples, 1000)  # Minimum 1000 samples
 
 
-def generate_sine_wave(num_samples: int, frequency: float, sampling_rate: float,
-                       amplitude: float = 100.0, phase: float = 0.0) -> np.ndarray:
+def generate_sine_wave(
+    num_samples: int, frequency: float, sampling_rate: float, amplitude: float = 100.0, phase: float = 0.0
+) -> np.ndarray:
     """
     Generate a sine wave signal.
 
@@ -80,9 +81,9 @@ def generate_sine_wave(num_samples: int, frequency: float, sampling_rate: float,
     return amplitude * np.sin(2 * np.pi * frequency * t + phase)
 
 
-def create_nwb_file(output_path: str, target_size_bytes: int,
-                    freq1: float = 10.0, freq2: float = 25.0,
-                    sampling_rate: float = 1000.0) -> dict:
+def create_nwb_file(
+    output_path: str, target_size_bytes: int, freq1: float = 10.0, freq2: float = 25.0, sampling_rate: float = 1000.0
+) -> dict:
     """
     Create an NWB file with two channels of sine wave data.
 
@@ -100,7 +101,7 @@ def create_nwb_file(output_path: str, target_size_bytes: int,
     num_samples = calculate_samples_for_size(target_size_bytes, num_channels)
     duration_seconds = num_samples / sampling_rate
 
-    print(f"Generating NWB file with:")
+    print("Generating NWB file with:")
     print(f"  Target size: {target_size_bytes / (1024**2):.2f} MB")
     print(f"  Samples: {num_samples:,}")
     print(f"  Duration: {duration_seconds:.2f} seconds ({duration_seconds/3600:.2f} hours)")
@@ -112,7 +113,7 @@ def create_nwb_file(output_path: str, target_size_bytes: int,
     # Generate sine wave data for both channels
     print("Generating sine wave data...")
     channel1_data = generate_sine_wave(num_samples, freq1, sampling_rate, amplitude=100.0)
-    channel2_data = generate_sine_wave(num_samples, freq2, sampling_rate, amplitude=150.0, phase=np.pi/4)
+    channel2_data = generate_sine_wave(num_samples, freq2, sampling_rate, amplitude=150.0, phase=np.pi / 4)
 
     # Stack into shape (num_samples, num_channels)
     data = np.column_stack([channel1_data, channel2_data])
@@ -137,7 +138,7 @@ def create_nwb_file(output_path: str, target_size_bytes: int,
     device = nwbfile.create_device(
         name="TestDevice",
         description="Virtual test device for generating sine wave data",
-        manufacturer="Test Manufacturer"
+        manufacturer="Test Manufacturer",
     )
 
     # Create electrode group
@@ -145,7 +146,7 @@ def create_nwb_file(output_path: str, target_size_bytes: int,
         name="TestElectrodeGroup",
         description="Test electrode group with two channels",
         location="Test Location",
-        device=device
+        device=device,
     )
 
     # Add electrodes to the electrode table
@@ -153,28 +154,29 @@ def create_nwb_file(output_path: str, target_size_bytes: int,
     nwbfile.add_electrode_column(name="channel_name", description="Name of the electrode channel")
 
     nwbfile.add_electrode(
-        x=0.0, y=0.0, z=0.0,
+        x=0.0,
+        y=0.0,
+        z=0.0,
         imp=1000.0,
         location="Test Location 1",
         filtering="None",
         group=electrode_group,
-        channel_name=f"SineWave_{freq1}Hz"
+        channel_name=f"SineWave_{freq1}Hz",
     )
 
     nwbfile.add_electrode(
-        x=1.0, y=0.0, z=0.0,
+        x=1.0,
+        y=0.0,
+        z=0.0,
         imp=1000.0,
         location="Test Location 2",
         filtering="None",
         group=electrode_group,
-        channel_name=f"SineWave_{freq2}Hz"
+        channel_name=f"SineWave_{freq2}Hz",
     )
 
     # Create electrode table region for all electrodes
-    electrode_table_region = nwbfile.create_electrode_table_region(
-        region=[0, 1],
-        description="All test electrodes"
-    )
+    electrode_table_region = nwbfile.create_electrode_table_region(region=[0, 1], description="All test electrodes")
 
     # Create ElectricalSeries with the sine wave data
     electrical_series = ElectricalSeries(
@@ -196,23 +198,23 @@ def create_nwb_file(output_path: str, target_size_bytes: int,
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with NWBHDF5IO(str(output_path), mode='w') as io:
+    with NWBHDF5IO(str(output_path), mode="w") as io:
         io.write(nwbfile)
 
     actual_size = output_path.stat().st_size
-    print(f"\nFile created successfully!")
+    print("\nFile created successfully!")
     print(f"  Actual file size: {actual_size / (1024**2):.2f} MB")
     print(f"  Size ratio: {actual_size / target_size_bytes:.2%} of target")
 
     return {
-        'output_path': str(output_path),
-        'target_size_bytes': target_size_bytes,
-        'actual_size_bytes': actual_size,
-        'num_samples': num_samples,
-        'num_channels': num_channels,
-        'duration_seconds': duration_seconds,
-        'sampling_rate': sampling_rate,
-        'channel_frequencies': [freq1, freq2],
+        "output_path": str(output_path),
+        "target_size_bytes": target_size_bytes,
+        "actual_size_bytes": actual_size,
+        "num_samples": num_samples,
+        "num_channels": num_channels,
+        "duration_seconds": duration_seconds,
+        "sampling_rate": sampling_rate,
+        "channel_frequencies": [freq1, freq2],
     }
 
 
@@ -226,41 +228,22 @@ Examples:
     %(prog)s --size 1GB --output large_test.nwb
     %(prog)s --size 50GB --output huge_test.nwb
     %(prog)s --size 100MB --freq1 5 --freq2 50 --rate 2000 --output custom.nwb
-        """
+        """,
+    )
+
+    parser.add_argument("--size", "-s", required=True, help="Target file size (e.g., '10MB', '1GB', '50GB')")
+
+    parser.add_argument("--output", "-o", required=True, help="Output NWB file path")
+
+    parser.add_argument(
+        "--freq1", type=float, default=10.0, help="Frequency of channel 1 sine wave in Hz (default: 10.0)"
     )
 
     parser.add_argument(
-        '--size', '-s',
-        required=True,
-        help="Target file size (e.g., '10MB', '1GB', '50GB')"
+        "--freq2", type=float, default=25.0, help="Frequency of channel 2 sine wave in Hz (default: 25.0)"
     )
 
-    parser.add_argument(
-        '--output', '-o',
-        required=True,
-        help="Output NWB file path"
-    )
-
-    parser.add_argument(
-        '--freq1',
-        type=float,
-        default=10.0,
-        help="Frequency of channel 1 sine wave in Hz (default: 10.0)"
-    )
-
-    parser.add_argument(
-        '--freq2',
-        type=float,
-        default=25.0,
-        help="Frequency of channel 2 sine wave in Hz (default: 25.0)"
-    )
-
-    parser.add_argument(
-        '--rate',
-        type=float,
-        default=1000.0,
-        help="Sampling rate in Hz (default: 1000.0)"
-    )
+    parser.add_argument("--rate", type=float, default=1000.0, help="Sampling rate in Hz (default: 1000.0)")
 
     args = parser.parse_args()
 
@@ -274,7 +257,7 @@ Examples:
     nyquist = args.rate / 2
     if args.freq1 >= nyquist or args.freq2 >= nyquist:
         print(f"Error: Frequencies must be less than Nyquist frequency ({nyquist} Hz)", file=sys.stderr)
-        print(f"  Increase --rate or decrease --freq1/--freq2", file=sys.stderr)
+        print("  Increase --rate or decrease --freq1/--freq2", file=sys.stderr)
         sys.exit(1)
 
     try:
@@ -283,7 +266,7 @@ Examples:
             target_size_bytes=target_size,
             freq1=args.freq1,
             freq2=args.freq2,
-            sampling_rate=args.rate
+            sampling_rate=args.rate,
         )
 
         print("\nFile metadata summary:")

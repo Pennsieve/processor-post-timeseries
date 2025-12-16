@@ -29,9 +29,9 @@ class NWBElectricalSeriesReader:
         self.num_samples, self.num_channels = self.electrical_series.data.shape
 
         assert self.num_samples > 0, "Electrical series has no sample data"
-        assert len(self.electrical_series.electrodes.table) == self.num_channels, (
-            "Electrode channels do not align with data shape"
-        )
+        assert (
+            len(self.electrical_series.electrodes.table) == self.num_channels
+        ), "Electrode channels do not align with data shape"
 
         self._sampling_rate = None
         self._timestamps = None

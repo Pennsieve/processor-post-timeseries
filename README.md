@@ -54,6 +54,14 @@ make install
 
 ## Development
 
+### Install Pre-commit Hooks
+
+```bash
+make pre-commit
+```
+
+This installs git hooks that automatically lint and format code on commit.
+
 ### Run Tests
 
 ```bash
@@ -71,6 +79,8 @@ make test-cov
 ```bash
 make lint
 ```
+
+Runs ruff with auto-fix and formatting.
 
 ## Running Locally
 
@@ -135,12 +145,12 @@ The processor generates two types of files per channel:
 | `INPUT_DIR` | Directory containing NWB files | - |
 | `OUTPUT_DIR` | Directory for output files | - |
 | `CHUNK_SIZE_MB` | Size of each data chunk in MB | `1` |
-| `IMPORTER_ENABLED` | Enable Pennsieve upload | `false` (local) |
+| `IMPORTER_ENABLED` | Enable Pennsieve upload | `false` |
 | `PENNSIEVE_API_KEY` | Pennsieve API key | - |
 | `PENNSIEVE_API_SECRET` | Pennsieve API secret | - |
 | `PENNSIEVE_API_HOST` | Pennsieve API endpoint | `https://api.pennsieve.net` |
 | `PENNSIEVE_API_HOST2` | Pennsieve API2 endpoint | `https://api2.pennsieve.net` |
-| `INTEGRATION_ID` | Workflow instance ID | auto-generated |
+| `INTEGRATION_ID` | Workflow instance ID | - |
 
 ## License
 
