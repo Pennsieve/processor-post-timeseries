@@ -1,8 +1,7 @@
-import pytest
 import json
-import responses
-from unittest.mock import Mock
 
+import pytest
+import responses
 from clients.workflow_client import WorkflowClient, WorkflowInstance
 
 

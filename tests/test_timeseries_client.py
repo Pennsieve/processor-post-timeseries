@@ -1,8 +1,7 @@
-import pytest
 import json
-import responses
-from unittest.mock import Mock
 
+import pytest
+import responses
 from clients.timeseries_client import TimeSeriesClient
 from timeseries_channel import TimeSeriesChannel
 

@@ -1,8 +1,8 @@
-import pytest
 import json
-import responses
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
+import pytest
+import responses
 from clients.authentication_client import AuthenticationClient
 
 

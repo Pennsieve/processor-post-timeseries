@@ -1,12 +1,11 @@
-import os
 import logging
+import os
 import time
-
-from pynwb import NWBHDF5IO
-from pynwb.ecephys import ElectricalSeries
 
 from config import Config
 from importer import import_timeseries
+from pynwb import NWBHDF5IO
+from pynwb.ecephys import ElectricalSeries
 from writer import TimeSeriesChunkWriter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

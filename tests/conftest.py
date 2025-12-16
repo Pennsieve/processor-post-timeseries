@@ -1,9 +1,10 @@
 import os
 import sys
-import pytest
-import numpy as np
-from unittest.mock import Mock, MagicMock
 from datetime import datetime
+from unittest.mock import Mock
+
+import numpy as np
+import pytest
 
 # Add processor directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "processor"))
@@ -124,8 +125,9 @@ def session_start_time():
 @pytest.fixture
 def sample_import_files():
     """Sample list of ImportFile objects for testing."""
-    from clients.import_client import ImportFile
     import uuid
+
+    from clients.import_client import ImportFile
 
     files = []
     for i in range(100):

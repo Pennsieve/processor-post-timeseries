@@ -1,5 +1,3 @@
-import os
-import uuid
 
 
 class TimeSeriesChannel:
@@ -14,9 +12,11 @@ class TimeSeriesChannel:
         unit="uV",
         group="default",
         last_annotation=0,
-        properties=[],
+        properties=None,
         id=None,
     ):
+        if properties is None:
+            properties = []
         assert type.upper() in ["CONTINUOUS", "UNIT"], "Type must be CONTINUOUS or UNIT"
 
         # metadata for intra-processor tracking

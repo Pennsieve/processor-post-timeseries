@@ -1,5 +1,5 @@
-import pytest
 import sys
+
 import numpy as np
 from utils import infer_sampling_rate, to_big_endian
 

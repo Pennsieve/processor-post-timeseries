@@ -1,9 +1,9 @@
 import gzip
 import json
 import logging
-import numpy as np
 import os
 
+import numpy as np
 from constants import TIME_SERIES_BINARY_FILE_EXTENSION, TIME_SERIES_METADATA_FILE_EXTENSION
 from reader import NWBElectricalSeriesReader
 from utils import to_big_endian

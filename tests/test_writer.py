@@ -1,14 +1,12 @@
-import pytest
 import gzip
 import json
 import os
-import numpy as np
-from datetime import datetime
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
-from writer import TimeSeriesChunkWriter
-from timeseries_channel import TimeSeriesChannel
+import numpy as np
 from constants import TIME_SERIES_BINARY_FILE_EXTENSION, TIME_SERIES_METADATA_FILE_EXTENSION
+from timeseries_channel import TimeSeriesChannel
+from writer import TimeSeriesChunkWriter
 
 
 class TestTimeSeriesChunkWriterInit:

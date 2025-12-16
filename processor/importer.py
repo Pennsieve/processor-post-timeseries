@@ -1,23 +1,16 @@
-import backoff
+import json
 import logging
 import os
-import json
 import re
-import requests
 import uuid
-
-from clients import AuthenticationClient, SessionManager
-from clients import ImportClient, ImportFile
-from clients import SessionManager
-from clients import TimeSeriesClient
-from clients import WorkflowClient, WorkflowInstance
-
-from constants import TIME_SERIES_BINARY_FILE_EXTENSION, TIME_SERIES_METADATA_FILE_EXTENSION
-
-from timeseries_channel import TimeSeriesChannel
-
 from concurrent.futures import ThreadPoolExecutor
-from multiprocessing import Value, Lock
+from multiprocessing import Lock, Value
+
+import backoff
+import requests
+from clients import AuthenticationClient, ImportClient, ImportFile, SessionManager, TimeSeriesClient, WorkflowClient
+from constants import TIME_SERIES_BINARY_FILE_EXTENSION, TIME_SERIES_METADATA_FILE_EXTENSION
+from timeseries_channel import TimeSeriesChannel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -139,7 +132,7 @@ def import_timeseries(api_host, api2_host, api_key, api_secret, workflow_instanc
             )
             raise e
 
-    successful_uploads = list()
+    successful_uploads = []
     with ThreadPoolExecutor(max_workers=4) as executor:
         # wrapping in a list forces the executor to wait for all threads to finish uploading time series files
         successful_uploads = list(executor.map(upload_timeseries_file, import_files))

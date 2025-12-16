@@ -1,11 +1,9 @@
-import pytest
-import numpy as np
 from datetime import datetime
-from unittest.mock import Mock, MagicMock, PropertyMock, patch
-from pandas import DataFrame, Series
+from unittest.mock import Mock
 
+import numpy as np
+import pytest
 from reader import NWBElectricalSeriesReader
-from timeseries_channel import TimeSeriesChannel
 
 
 def create_mock_electrical_series(

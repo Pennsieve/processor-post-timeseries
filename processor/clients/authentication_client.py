@@ -1,7 +1,8 @@
-import boto3
-import requests
 import json
 import logging
+
+import boto3
+import requests
 
 log = logging.getLogger()
 

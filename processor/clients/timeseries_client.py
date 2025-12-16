@@ -1,9 +1,11 @@
-import requests
 import json
 import logging
 
-from .base_client import BaseClient
+import requests
+
 from processor.timeseries_channel import TimeSeriesChannel
+
+from .base_client import BaseClient
 
 log = logging.getLogger()
 

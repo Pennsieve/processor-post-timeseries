@@ -1,7 +1,8 @@
-import requests
 import json
 import logging
 import math
+
+import requests
 
 from .base_client import BaseClient
 

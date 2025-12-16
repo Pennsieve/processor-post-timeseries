@@ -1,8 +1,7 @@
 import logging
-import numpy as np
 
+import numpy as np
 from pandas import DataFrame, Series
-from pynwb.ecephys import ElectricalSeries
 from timeseries_channel import TimeSeriesChannel
 from utils import infer_sampling_rate
 
@@ -101,7 +100,7 @@ class NWBElectricalSeriesReader:
     @property
     def channels(self):
         if not self._channels:
-            channels = list()
+            channels = []
             for index, electrode in enumerate(self.electrical_series.electrodes):
                 name = ""
                 if isinstance(electrode, DataFrame):

@@ -1,8 +1,8 @@
+from unittest.mock import Mock
+
 import pytest
 import requests
-from unittest.mock import Mock, patch, MagicMock
-
-from clients.base_client import SessionManager, BaseClient
+from clients.base_client import BaseClient, SessionManager
 
 
 class TestSessionManager:
@@ -236,7 +236,7 @@ class TestBaseClientIntegration:
         mock_authentication_client.authenticate.side_effect = ["mock-access-token", "refreshed-token"]
 
         client = TestClient(session_manager)
-        token = client.get_token()
+        client.get_token()
 
         # The refresh_session was called, showing the retry mechanism worked
         assert call_count[0] == 2  # Verifies retry happened

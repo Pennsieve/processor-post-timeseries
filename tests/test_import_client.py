@@ -1,10 +1,10 @@
-import pytest
 import json
 import uuid
-import responses
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 
-from clients.import_client import ImportClient, ImportFile, calculate_batch_size, MAX_REQUEST_SIZE_BYTES
+import pytest
+import responses
+from clients.import_client import MAX_REQUEST_SIZE_BYTES, ImportClient, ImportFile, calculate_batch_size
 
 
 class TestImportFile:
