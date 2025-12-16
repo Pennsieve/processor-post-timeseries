@@ -89,6 +89,7 @@ class NWBElectricalSeriesReader:
             float(self.electrical_series.timestamps[index])
             if self._has_explicit_timestamps
             else (index / self._sampling_rate)
+        )
         return timestamp + self.session_start_time_secs
 
     def get_timestamps(self, start, end):
