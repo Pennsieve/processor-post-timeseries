@@ -56,11 +56,11 @@ make install
 
 ### Install Pre-commit Hooks
 
+This installs git hooks that automatically lint and format code on commit.
+
 ```bash
 make pre-commit
 ```
-
-This installs git hooks that automatically lint and format code on commit.
 
 ### Run Tests
 
@@ -76,11 +76,11 @@ make test-cov
 
 ### Run Linter
 
+Runs ruff with auto-fix and formatting.
+
 ```bash
 make lint
 ```
-
-Runs ruff with auto-fix and formatting.
 
 ## Running Locally
 
