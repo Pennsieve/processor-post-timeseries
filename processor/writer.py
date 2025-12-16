@@ -12,16 +12,18 @@ from utils import to_big_endian
 log = logging.getLogger()
 
 
-def _write_channel_chunk_worker(args):
+def _write_channel_chunk_worker(chunk_data, start_time, end_time, channel_index, output_dir):
     """
     Worker function for parallel channel chunk processing.
     Must be a top-level function to be picklable for ProcessPoolExecutor.
 
     Args:
-        args: Tuple of (chunk_data, start_time, end_time, channel_index, output_dir)
+        chunk_data: numpy array of sample data for the channel
+        start_time: start timestamp in seconds
+        end_time: end timestamp in seconds
+        channel_index: channel index for filename
+        output_dir: directory to write output file
     """
-    chunk_data, start_time, end_time, channel_index, output_dir = args
-
     # Convert to big-endian format
     formatted_data = to_big_endian(chunk_data.astype(np.float64))
 
@@ -79,14 +81,22 @@ class TimeSeriesChunkWriter:
                         reader.get_chunk(channel_index, chunk_start, chunk_end) for channel_index in range(num_channels)
                     ]
 
-                    # Prepare arguments for parallel processing
-                    worker_args = [
-                        (channel_chunks[i], start_time, end_time, reader.channels[i].index, self.output_dir)
+                    # Submit all channels for parallel processing
+                    futures = [
+                        executor.submit(
+                            _write_channel_chunk_worker,
+                            channel_chunks[i],
+                            start_time,
+                            end_time,
+                            reader.channels[i].index,
+                            self.output_dir,
+                        )
                         for i in range(num_channels)
                     ]
 
-                    # Process all channels in parallel
-                    list(executor.map(_write_channel_chunk_worker, worker_args))
+                    # Wait for all to complete
+                    for future in futures:
+                        future.result()
 
         for channel in reader.channels:
             self.write_channel(channel)
