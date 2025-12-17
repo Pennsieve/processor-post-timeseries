@@ -37,6 +37,11 @@ class NWBElectricalSeriesReader:
         self._sampling_rate = None
         self._compute_sampling_rate()
 
+        if self.has_explicit_timestamps:
+            assert self.num_samples == len(
+                self.electrical_series.timestamps
+            ), "Differing number of sample and timestamp value"
+
         self._channels = None
 
     @property
