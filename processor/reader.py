@@ -35,10 +35,13 @@ class NWBElectricalSeriesReader:
         ), "Electrode channels do not align with data shape"
 
         self._sampling_rate = None
-        self._has_explicit_timestamps = False
         self._compute_sampling_rate()
 
         self._channels = None
+
+    @property
+    def has_explicit_timestamps(self):
+        return self.electrical_series.timestamps is not None
 
     def _compute_sampling_rate(self):
         """
@@ -56,8 +59,7 @@ class NWBElectricalSeriesReader:
         # if both the timestamps and rate properties are set on the electrical
         # series validate that the given rate is within a 2% margin of the
         # sampling rate calculated off of the given timestamps
-        if self.electrical_series.rate and self.electrical_series.timestamps is not None:
-            self._has_explicit_timestamps = True
+        if self.electrical_series.rate and self.has_explicit_timestamps:
             sampling_rate = self.electrical_series.rate
 
             sample_size = min(10000, self.num_samples)
@@ -76,11 +78,9 @@ class NWBElectricalSeriesReader:
         # if only the rate is given, timestamps will be computed on-demand
         elif self.electrical_series.rate:
             self._sampling_rate = self.electrical_series.rate
-            self._has_explicit_timestamps = False
 
         # if only the timestamps are given, calculate the sampling rate using a sample of timestamps
-        elif self.electrical_series.timestamps is not None:
-            self._has_explicit_timestamps = True
+        elif self.has_explicit_timestamps:
             sample_size = min(10000, self.num_samples)
             sample_timestamps = self.electrical_series.timestamps[:sample_size]
             self._sampling_rate = round(infer_sampling_rate(sample_timestamps))
@@ -92,7 +92,7 @@ class NWBElectricalSeriesReader:
         """
         timestamp = (
             float(self.electrical_series.timestamps[index])
-            if self._has_explicit_timestamps
+            if self.has_explicit_timestamps
             else (index / self._sampling_rate)
         )
         return timestamp + self.session_start_time_secs
@@ -105,7 +105,7 @@ class NWBElectricalSeriesReader:
         """
         timestamps = (
             np.array(self.electrical_series.timestamps[start:end])
-            if self._has_explicit_timestamps
+            if self.has_explicit_timestamps
             else np.linspace(
                 start / self._sampling_rate,
                 end / self._sampling_rate,
@@ -171,7 +171,7 @@ class NWBElectricalSeriesReader:
             (timestamp_difference) > 2 * sampling_period
         """
         # if no explicit timestamps, data is continuous by definition
-        if not self._has_explicit_timestamps:
+        if not self.has_explicit_timestamps:
             yield 0, self.num_samples
             return
 
