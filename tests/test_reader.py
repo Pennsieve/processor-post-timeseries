@@ -60,7 +60,6 @@ class TestNWBElectricalSeriesReaderInit:
         assert reader.num_samples == 1000
         assert reader.num_channels == 4
         assert reader.sampling_rate == 1000.0
-        assert len(reader.timestamps) == 1000
 
     def test_initialization_with_timestamps(self):
         """Test initialization with timestamps specified.
@@ -114,37 +113,24 @@ class TestNWBElectricalSeriesReaderInit:
 
         # Timestamps should be offset by session_start_time_secs
         expected_start = session_start.timestamp()
-        assert reader.timestamps[0] == pytest.approx(expected_start, rel=1e-6)
+        assert reader.get_timestamp(0) == pytest.approx(expected_start, rel=1e-6)
 
 
 class TestSamplingRateAndTimestampComputation:
-    """Tests for _compute_sampling_rate_and_timestamps method."""
+    """Tests for sampling rate and timestamp computation."""
 
-    def test_rate_only_generates_timestamps(self):
+    def test_rate_only_generates_correct_timestamps(self):
         """Test that timestamps are generated from rate when only rate is provided."""
         series = create_mock_electrical_series(1000, 2, rate=1000.0)
         session_start = datetime(2023, 1, 1, 12, 0, 0)
 
         reader = NWBElectricalSeriesReader(series, session_start)
 
-        # Should have 1000 timestamps spanning 1 second
-        assert len(reader.timestamps) == 1000
         # First timestamp should be at session start
-        assert reader.timestamps[0] == pytest.approx(session_start.timestamp(), rel=1e-6)
+        assert reader.get_timestamp(0) == pytest.approx(session_start.timestamp(), rel=1e-6)
         # Time span should be ~1 second (1000 samples at 1000 Hz)
-        time_span = reader.timestamps[-1] - reader.timestamps[0]
+        time_span = reader.get_timestamp(999) - reader.get_timestamp(0)
         assert time_span == pytest.approx(0.999, rel=1e-3)
-
-    def test_rate_generates_correct_timestamps(self):
-        """Test that timestamps are generated correctly from rate."""
-        series = create_mock_electrical_series(100, 2, rate=100.0)  # 100 Hz
-        session_start = datetime(2023, 1, 1, 12, 0, 0)
-
-        reader = NWBElectricalSeriesReader(series, session_start)
-
-        # Timestamps should span 1 second (100 samples at 100 Hz)
-        time_span = reader.timestamps[-1] - reader.timestamps[0]
-        assert abs(time_span - 0.99) < 0.01  # Approximately 0.99 seconds
 
     def test_rate_stored_correctly(self):
         """Test that rate is stored correctly."""
@@ -154,15 +140,6 @@ class TestSamplingRateAndTimestampComputation:
         reader = NWBElectricalSeriesReader(series, session_start)
 
         assert reader.sampling_rate == 30000.0
-
-    def test_timestamps_count_matches_samples(self):
-        """Test that number of timestamps matches number of samples."""
-        series = create_mock_electrical_series(500, 3, rate=1000.0)
-        session_start = datetime(2023, 1, 1, 12, 0, 0)
-
-        reader = NWBElectricalSeriesReader(series, session_start)
-
-        assert len(reader.timestamps) == 500
 
 
 class TestChannelsProperty:
@@ -251,73 +228,73 @@ class TestContiguousChunks:
             assert start < end
 
 
-class TestGetChunk:
-    """Tests for get_chunk method."""
+class TestGetAllChannelsChunk:
+    """Tests for batch channel reading."""
 
-    def test_get_full_channel_data(self):
-        """Test getting full channel data without start/end."""
+    def test_returns_all_channels(self):
+        """Test that get_chunk returns data for all channels."""
+        series = create_mock_electrical_series(100, 4, rate=1000.0)
+        session_start = datetime(2023, 1, 1, 12, 0, 0)
+
+        reader = NWBElectricalSeriesReader(series, session_start)
+        chunks = reader.get_chunk(0, 50)
+
+        assert len(chunks) == 4
+        for chunk in chunks:
+            assert len(chunk) == 50
+
+    def test_get_full_data(self):
+        """Test getting full data without start/end."""
         series = create_mock_electrical_series(10, 2, rate=1000.0)
-        # Set specific data values
         series.data = np.arange(20).reshape(10, 2).astype(np.float64)
         session_start = datetime(2023, 1, 1, 12, 0, 0)
 
         reader = NWBElectricalSeriesReader(series, session_start)
-        chunk = reader.get_chunk(0)  # First channel
+        chunks = reader.get_chunk()
 
-        np.testing.assert_array_equal(chunk, series.data[:, 0])
+        np.testing.assert_array_equal(chunks[0], series.data[:, 0])
+        np.testing.assert_array_equal(chunks[1], series.data[:, 1])
 
-    def test_get_partial_channel_data(self):
-        """Test getting partial channel data with start/end."""
+    def test_get_partial_data(self):
+        """Test getting partial data with start/end."""
         series = create_mock_electrical_series(10, 2, rate=1000.0)
         series.data = np.arange(20).reshape(10, 2).astype(np.float64)
         session_start = datetime(2023, 1, 1, 12, 0, 0)
 
         reader = NWBElectricalSeriesReader(series, session_start)
-        chunk = reader.get_chunk(1, start=2, end=5)  # Second channel, samples 2-5
+        chunks = reader.get_chunk(start=2, end=5)
 
-        np.testing.assert_array_equal(chunk, series.data[2:5, 1])
+        np.testing.assert_array_equal(chunks[0], series.data[2:5, 0])
+        np.testing.assert_array_equal(chunks[1], series.data[2:5, 1])
 
     def test_conversion_factor_applied(self):
-        """Test that conversion factor is applied to data."""
+        """Test that conversion factor is applied in batch read."""
         series = create_mock_electrical_series(10, 2, rate=1000.0, conversion=2.0)
         series.data = np.ones((10, 2))
         session_start = datetime(2023, 1, 1, 12, 0, 0)
 
         reader = NWBElectricalSeriesReader(series, session_start)
-        chunk = reader.get_chunk(0)
+        chunks = reader.get_chunk()
 
-        np.testing.assert_array_equal(chunk, np.ones(10) * 2.0)
-
-    def test_offset_applied(self):
-        """Test that offset is applied to data."""
-        series = create_mock_electrical_series(10, 2, rate=1000.0, offset=5.0)
-        series.data = np.ones((10, 2))
-        session_start = datetime(2023, 1, 1, 12, 0, 0)
-
-        reader = NWBElectricalSeriesReader(series, session_start)
-        chunk = reader.get_chunk(0)
-
-        np.testing.assert_array_equal(chunk, np.ones(10) * 1.0 + 5.0)
+        for chunk in chunks:
+            np.testing.assert_array_equal(chunk, np.ones(10) * 2.0)
 
     def test_channel_conversion_applied(self):
-        """Test that per-channel conversion is applied."""
-        channel_conversion = [2.0, 3.0]
-        series = create_mock_electrical_series(10, 2, rate=1000.0, channel_conversion=channel_conversion)
-        series.data = np.ones((10, 2))
+        """Test that per-channel conversion is applied in batch read."""
+        channel_conversion = [2.0, 3.0, 4.0]
+        series = create_mock_electrical_series(10, 3, rate=1000.0, channel_conversion=channel_conversion)
+        series.data = np.ones((10, 3))
         session_start = datetime(2023, 1, 1, 12, 0, 0)
 
         reader = NWBElectricalSeriesReader(series, session_start)
+        chunks = reader.get_chunk()
 
-        chunk0 = reader.get_chunk(0)
-        chunk1 = reader.get_chunk(1)
-
-        np.testing.assert_array_equal(chunk0, np.ones(10) * 2.0)
-        np.testing.assert_array_equal(chunk1, np.ones(10) * 3.0)
+        np.testing.assert_array_equal(chunks[0], np.ones(10) * 2.0)
+        np.testing.assert_array_equal(chunks[1], np.ones(10) * 3.0)
+        np.testing.assert_array_equal(chunks[2], np.ones(10) * 4.0)
 
     def test_all_scaling_factors_combined(self):
-        """Test that conversion, channel_conversion, and offset are all applied."""
-        # Result should be: data * conversion * channel_conversion + offset
-        # = 1.0 * 2.0 * 3.0 + 1.0 = 7.0
+        """Test that all scaling factors are applied in batch read."""
         series = create_mock_electrical_series(
             10, 2, rate=1000.0, conversion=2.0, channel_conversion=[3.0, 4.0], offset=1.0
         )
@@ -325,6 +302,8 @@ class TestGetChunk:
         session_start = datetime(2023, 1, 1, 12, 0, 0)
 
         reader = NWBElectricalSeriesReader(series, session_start)
-        chunk = reader.get_chunk(0)
+        chunks = reader.get_chunk()
 
-        np.testing.assert_array_equal(chunk, np.ones(10) * 7.0)
+        # Result: data * conversion * channel_conversion + offset
+        np.testing.assert_array_equal(chunks[0], np.ones(10) * 7.0)  # 1 * 2 * 3 + 1 = 7
+        np.testing.assert_array_equal(chunks[1], np.ones(10) * 9.0)  # 1 * 2 * 4 + 1 = 9

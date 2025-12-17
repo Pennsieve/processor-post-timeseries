@@ -2,6 +2,7 @@ import gzip
 import json
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from constants import TIME_SERIES_BINARY_FILE_EXTENSION, TIME_SERIES_METADATA_FILE_EXTENSION
@@ -24,47 +25,77 @@ class TimeSeriesChunkWriter:
         self.output_dir = output_dir
         self.chunk_size = chunk_size
 
-    def write_electrical_series(self, electrical_series):
+    def write_electrical_series(self, electrical_series, max_workers=None):
         """
         Chunks the sample data in two stages:
             1. Splits sample data into contiguous segments using the given or generated timestamp values
             2. Chunks each contiguous segment into the given chunk_size (number of samples to include per file)
 
-        Writes each chunk to the given output directory
+        Writes each chunk to the given output directory.
+        Channel processing is parallelized using ThreadPoolExecutor. Threads share memory
+        (no serialization overhead) and the GIL is released during gzip compression and file I/O.
+
+        Args:
+            electrical_series: NWB ElectricalSeries object
+            max_workers: Maximum number of threads (defaults to min(32, cpu_count + 4))
         """
         reader = NWBElectricalSeriesReader(electrical_series, self.session_start_time)
+        num_channels = len(reader.channels)
 
-        for contiguous_start, contiguous_end in reader.contiguous_chunks():
-            for chunk_start in range(contiguous_start, contiguous_end, self.chunk_size):
-                chunk_end = min(contiguous_end, chunk_start + self.chunk_size)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for contiguous_start, contiguous_end in reader.contiguous_chunks():
+                for chunk_start in range(contiguous_start, contiguous_end, self.chunk_size):
+                    chunk_end = min(contiguous_end, chunk_start + self.chunk_size)
 
-                start_time = reader.timestamps[chunk_start]
-                end_time = reader.timestamps[chunk_end - 1]
+                    start_time = reader.get_timestamp(chunk_start)
+                    end_time = reader.get_timestamp(chunk_end - 1)
 
-                for channel_index in range(len(reader.channels)):
-                    chunk = reader.get_chunk(channel_index, chunk_start, chunk_end)
-                    channel = reader.channels[channel_index]
-                    self.write_chunk(chunk, start_time, end_time, channel)
+                    channel_chunks = reader.get_chunk(chunk_start, chunk_end)
+
+                    futures = [
+                        executor.submit(
+                            self.write_chunk,
+                            channel_chunks[i],
+                            start_time,
+                            end_time,
+                            reader.channels[i].index,
+                            self.output_dir,
+                        )
+                        for i in range(num_channels)
+                    ]
+
+                    for future in futures:
+                        future.result()
 
         for channel in reader.channels:
             self.write_channel(channel)
 
-    def write_chunk(self, chunk, start_time, end_time, channel):
+    @staticmethod
+    def write_chunk(chunk, start_time, end_time, channel_index, output_dir):
         """
         Formats the chunked sample data into 64-bit (8 byte) values in big-endian.
 
         Writes the chunked sample data to a gzipped binary file.
+
+        Args:
+            chunk: numpy array of sample data for the channel
+            start_time: start timestamp in seconds
+            end_time: end timestamp in seconds
+            channel_index: channel index for output filename
+            output_dir: directory to write chunked output file
         """
         # ensure the samples are 64-bit float-pointing numbers in big-endian before converting to bytes
         formatted_data = to_big_endian(chunk.astype(np.float64))
 
-        channel_index = "{index:05d}".format(index=channel.index)
         file_name = "channel-{}_{}_{}{}".format(
-            channel_index, int(start_time * 1e6), int(end_time * 1e6), TIME_SERIES_BINARY_FILE_EXTENSION
+            "{index:05d}".format(index=channel_index),
+            int(start_time * 1e6),
+            int(end_time * 1e6),
+            TIME_SERIES_BINARY_FILE_EXTENSION,
         )
-        file_path = os.path.join(self.output_dir, file_name)
+        file_path = os.path.join(output_dir, file_name)
 
-        with gzip.open(file_path, mode="wb", compresslevel=1) as f:
+        with gzip.open(file_path, mode="wb", compresslevel=0) as f:
             f.write(formatted_data)
 
     def write_channel(self, channel):
