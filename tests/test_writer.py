@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 from constants import TIME_SERIES_BINARY_FILE_EXTENSION, TIME_SERIES_METADATA_FILE_EXTENSION
 from timeseries_channel import TimeSeriesChannel
-from writer import TimeSeriesChunkWriter, _write_channel_chunk
+from writer import TimeSeriesChunkWriter
 
 
 class TestTimeSeriesChunkWriterInit:
@@ -24,19 +24,15 @@ class TestTimeSeriesChunkWriterInit:
 
 
 class TestWriteChunk:
-    """Tests for write_chunk method."""
+    """Tests for write_chunk static method."""
 
-    def test_write_chunk_creates_file(self, temp_output_dir, session_start_time):
+    def test_write_chunk_creates_file(self, temp_output_dir):
         """Test that write_chunk creates a binary file."""
-        writer = TimeSeriesChunkWriter(session_start_time, temp_output_dir, 1000)
-
         chunk = np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float64)
-        channel = TimeSeriesChannel(index=0, name="Test Channel", rate=1000.0, start=1000000, end=2000000)
-
         start_time = 1.0
         end_time = 1.005
 
-        writer.write_chunk(chunk, start_time, end_time, channel)
+        TimeSeriesChunkWriter.write_chunk(chunk, start_time, end_time, 0, temp_output_dir)
 
         # Check file was created
         expected_filename = (
@@ -45,14 +41,11 @@ class TestWriteChunk:
         file_path = os.path.join(temp_output_dir, expected_filename)
         assert os.path.exists(file_path)
 
-    def test_write_chunk_gzip_compressed(self, temp_output_dir, session_start_time):
+    def test_write_chunk_gzip_compressed(self, temp_output_dir):
         """Test that output file is gzip compressed."""
-        writer = TimeSeriesChunkWriter(session_start_time, temp_output_dir, 1000)
-
         chunk = np.array([1.0, 2.0, 3.0], dtype=np.float64)
-        channel = TimeSeriesChannel(index=0, name="Test", rate=1000.0, start=0, end=1000)
 
-        writer.write_chunk(chunk, 1.0, 1.003, channel)
+        TimeSeriesChunkWriter.write_chunk(chunk, 1.0, 1.003, 0, temp_output_dir)
 
         # Find the file (timestamps may vary slightly)
         files = [f for f in os.listdir(temp_output_dir) if f.endswith(".bin.gz")]
@@ -64,14 +57,11 @@ class TestWriteChunk:
             data = f.read()
             assert len(data) > 0
 
-    def test_write_chunk_big_endian_format(self, temp_output_dir, session_start_time):
+    def test_write_chunk_big_endian_format(self, temp_output_dir):
         """Test that data is written in big-endian format."""
-        writer = TimeSeriesChunkWriter(session_start_time, temp_output_dir, 1000)
-
         chunk = np.array([1.0, 2.0, 3.0], dtype=np.float64)
-        channel = TimeSeriesChannel(index=0, name="Test", rate=1000.0, start=0, end=1000)
 
-        writer.write_chunk(chunk, 1.0, 1.003, channel)
+        TimeSeriesChunkWriter.write_chunk(chunk, 1.0, 1.003, 0, temp_output_dir)
 
         # Find the file
         files = [f for f in os.listdir(temp_output_dir) if f.endswith(".bin.gz")]
@@ -85,32 +75,26 @@ class TestWriteChunk:
         result = np.frombuffer(data, dtype=">f8")
         np.testing.assert_array_equal(result, [1.0, 2.0, 3.0])
 
-    def test_write_chunk_channel_index_formatting(self, temp_output_dir, session_start_time):
+    def test_write_chunk_channel_index_formatting(self, temp_output_dir):
         """Test that channel index is zero-padded to 5 digits."""
-        writer = TimeSeriesChunkWriter(session_start_time, temp_output_dir, 1000)
-
         chunk = np.array([1.0], dtype=np.float64)
 
         # Test various channel indices with unique timestamps to avoid overwriting
         for i, index in enumerate([0, 5, 42, 999, 12345]):
-            channel = TimeSeriesChannel(index=index, name="Test", rate=1000.0, start=0, end=1000)
             start_time = 1.0 + i * 0.1
             end_time = start_time + 0.001
-            writer.write_chunk(chunk, start_time, end_time, channel)
+            TimeSeriesChunkWriter.write_chunk(chunk, start_time, end_time, index, temp_output_dir)
 
             # Check that file with correct channel index prefix exists
             files = [f for f in os.listdir(temp_output_dir) if f.startswith(f"channel-{index:05d}_")]
             assert len(files) >= 1, f"No file found for channel index {index}"
 
-    def test_write_chunk_preserves_data_precision(self, temp_output_dir, session_start_time):
+    def test_write_chunk_preserves_data_precision(self, temp_output_dir):
         """Test that float64 precision is preserved."""
-        writer = TimeSeriesChunkWriter(session_start_time, temp_output_dir, 1000)
-
         # Use values that require float64 precision
         chunk = np.array([1.123456789012345, -9.87654321098765e10, 1e-15], dtype=np.float64)
-        channel = TimeSeriesChannel(index=0, name="Test", rate=1000.0, start=0, end=1000)
 
-        writer.write_chunk(chunk, 1.0, 1.003, channel)
+        TimeSeriesChunkWriter.write_chunk(chunk, 1.0, 1.003, 0, temp_output_dir)
 
         # Find the file
         files = [f for f in os.listdir(temp_output_dir) if f.endswith(".bin.gz")]
@@ -284,14 +268,11 @@ class TestWriteElectricalSeries:
 class TestWriteChunkEdgeCases:
     """Edge case tests for chunk writing."""
 
-    def test_write_empty_chunk(self, temp_output_dir, session_start_time):
+    def test_write_empty_chunk(self, temp_output_dir):
         """Test writing an empty chunk."""
-        writer = TimeSeriesChunkWriter(session_start_time, temp_output_dir, 1000)
-
         chunk = np.array([], dtype=np.float64)
-        channel = TimeSeriesChannel(index=0, name="Test", rate=1000.0, start=0, end=1000)
 
-        writer.write_chunk(chunk, 1.0, 1.0, channel)
+        TimeSeriesChunkWriter.write_chunk(chunk, 1.0, 1.0, 0, temp_output_dir)
 
         file_path = os.path.join(temp_output_dir, "channel-00000_1000000_1000000.bin.gz")
 
@@ -300,15 +281,12 @@ class TestWriteChunkEdgeCases:
 
         assert len(data) == 0
 
-    def test_write_large_chunk(self, temp_output_dir, session_start_time):
+    def test_write_large_chunk(self, temp_output_dir):
         """Test writing a large chunk."""
-        writer = TimeSeriesChunkWriter(session_start_time, temp_output_dir, 1000)
-
         # 1 million samples
         chunk = np.random.randn(1000000).astype(np.float64)
-        channel = TimeSeriesChannel(index=0, name="Test", rate=1000.0, start=0, end=1000)
 
-        writer.write_chunk(chunk, 0.0, 1000.0, channel)
+        TimeSeriesChunkWriter.write_chunk(chunk, 0.0, 1000.0, 0, temp_output_dir)
 
         file_path = os.path.join(temp_output_dir, "channel-00000_0_1000000000.bin.gz")
         assert os.path.exists(file_path)
@@ -320,14 +298,11 @@ class TestWriteChunkEdgeCases:
         result = np.frombuffer(data, dtype=">f8")
         assert len(result) == 1000000
 
-    def test_write_chunk_special_float_values(self, temp_output_dir, session_start_time):
+    def test_write_chunk_special_float_values(self, temp_output_dir):
         """Test writing chunks with special float values."""
-        writer = TimeSeriesChunkWriter(session_start_time, temp_output_dir, 1000)
-
         chunk = np.array([np.inf, -np.inf, np.nan, 0.0, -0.0], dtype=np.float64)
-        channel = TimeSeriesChannel(index=0, name="Test", rate=1000.0, start=0, end=1000)
 
-        writer.write_chunk(chunk, 1.0, 1.005, channel)
+        TimeSeriesChunkWriter.write_chunk(chunk, 1.0, 1.005, 0, temp_output_dir)
 
         # Find the file
         files = [f for f in os.listdir(temp_output_dir) if f.endswith(".bin.gz")]
@@ -345,40 +320,6 @@ class TestWriteChunkEdgeCases:
 
 class TestParallelProcessing:
     """Tests for parallel channel processing functionality."""
-
-    def test_write_channel_chunk(self, temp_output_dir):
-        """Test the channel chunk write function directly."""
-        chunk_data = np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float64)
-        start_time = 1.0
-        end_time = 1.005
-        channel_index = 0
-
-        _write_channel_chunk(chunk_data, start_time, end_time, channel_index, temp_output_dir)
-
-        # Check file was created
-        expected_filename = (
-            f"channel-00000_{int(start_time * 1e6)}_{int(end_time * 1e6)}{TIME_SERIES_BINARY_FILE_EXTENSION}"
-        )
-        file_path = os.path.join(temp_output_dir, expected_filename)
-        assert os.path.exists(file_path)
-
-        # Verify data integrity
-        with gzip.open(file_path, "rb") as f:
-            data = f.read()
-        result = np.frombuffer(data, dtype=">f8")
-        np.testing.assert_array_equal(result, [1.0, 2.0, 3.0, 4.0, 5.0])
-
-    def test_write_channel_chunk_big_endian(self, temp_output_dir):
-        """Test that chunk write function outputs big-endian format."""
-        chunk_data = np.array([1.5, -2.5], dtype=np.float64)
-        _write_channel_chunk(chunk_data, 0.0, 0.001, 5, temp_output_dir)
-
-        file_path = os.path.join(temp_output_dir, "channel-00005_0_1000.bin.gz")
-        with gzip.open(file_path, "rb") as f:
-            data = f.read()
-
-        result = np.frombuffer(data, dtype=">f8")
-        np.testing.assert_array_equal(result, [1.5, -2.5])
 
     def test_parallel_processing_many_channels(self, temp_output_dir, session_start_time):
         """Test parallel processing with many channels (typical neuroscience scenario)."""

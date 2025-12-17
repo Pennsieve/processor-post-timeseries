@@ -12,29 +12,6 @@ from utils import to_big_endian
 log = logging.getLogger()
 
 
-def _write_channel_chunk(chunk_data, start_time, end_time, channel_index, output_dir):
-    """
-    Write a single channel's chunk data to a gzipped file.
-
-    Args:
-        chunk_data: numpy array of sample data for the channel
-        start_time: start timestamp in seconds
-        end_time: end timestamp in seconds
-        channel_index: channel index for filename
-        output_dir: directory to write output file
-    """
-    formatted_data = to_big_endian(chunk_data.astype(np.float64))
-
-    channel_index_str = "{index:05d}".format(index=channel_index)
-    file_name = "channel-{}_{}_{}{}".format(
-        channel_index_str, int(start_time * 1e6), int(end_time * 1e6), TIME_SERIES_BINARY_FILE_EXTENSION
-    )
-    file_path = os.path.join(output_dir, file_name)
-
-    with gzip.open(file_path, mode="wb", compresslevel=0) as f:
-        f.write(formatted_data)
-
-
 class TimeSeriesChunkWriter:
     """
     Attributes:
@@ -77,7 +54,7 @@ class TimeSeriesChunkWriter:
 
                     futures = [
                         executor.submit(
-                            _write_channel_chunk,
+                            self.write_chunk,
                             channel_chunks[i],
                             start_time,
                             end_time,
@@ -93,17 +70,33 @@ class TimeSeriesChunkWriter:
         for channel in reader.channels:
             self.write_channel(channel)
 
-    def write_chunk(self, chunk, start_time, end_time, channel):
+    @staticmethod
+    def write_chunk(chunk, start_time, end_time, channel_index, output_dir):
         """
+        Formats the chunked sample data into 64-bit (8 byte) values in big-endian.
+
         Writes the chunked sample data to a gzipped binary file.
 
         Args:
-            chunk: numpy array of sample data
+            chunk: numpy array of sample data for the channel
             start_time: start timestamp in seconds
             end_time: end timestamp in seconds
-            channel: TimeSeriesChannel object
+            channel_index: channel index for output filename
+            output_dir: directory to write chunked output file
         """
-        _write_channel_chunk(chunk, start_time, end_time, channel.index, self.output_dir)
+        # ensure the samples are 64-bit float-pointing numbers in big-endian before converting to bytes
+        formatted_data = to_big_endian(chunk.astype(np.float64))
+
+        file_name = "channel-{}_{}_{}{}".format(
+            "{index:05d}".format(index=channel_index),
+            int(start_time * 1e6),
+            int(end_time * 1e6),
+            TIME_SERIES_BINARY_FILE_EXTENSION,
+        )
+        file_path = os.path.join(output_dir, file_name)
+
+        with gzip.open(file_path, mode="wb", compresslevel=0) as f:
+            f.write(formatted_data)
 
     def write_channel(self, channel):
         file_name = f"channel-{channel.index:05d}{TIME_SERIES_METADATA_FILE_EXTENSION}"
