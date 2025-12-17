@@ -2,7 +2,7 @@ import gzip
 import json
 import logging
 import os
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from constants import TIME_SERIES_BINARY_FILE_EXTENSION, TIME_SERIES_METADATA_FILE_EXTENSION
@@ -12,10 +12,9 @@ from utils import to_big_endian
 log = logging.getLogger()
 
 
-def _write_channel_chunk_worker(chunk_data, start_time, end_time, channel_index, output_dir):
+def _write_channel_chunk(chunk_data, start_time, end_time, channel_index, output_dir):
     """
-    Worker function for parallel channel chunk processing.
-    Must be a top-level function to be picklable for ProcessPoolExecutor.
+    Write a single channel's chunk data to a gzipped file.
 
     Args:
         chunk_data: numpy array of sample data for the channel
@@ -24,7 +23,6 @@ def _write_channel_chunk_worker(chunk_data, start_time, end_time, channel_index,
         channel_index: channel index for filename
         output_dir: directory to write output file
     """
-    # Convert to big-endian format
     formatted_data = to_big_endian(chunk_data.astype(np.float64))
 
     channel_index_str = "{index:05d}".format(index=channel_index)
@@ -33,7 +31,7 @@ def _write_channel_chunk_worker(chunk_data, start_time, end_time, channel_index,
     )
     file_path = os.path.join(output_dir, file_name)
 
-    with gzip.open(file_path, mode="wb", compresslevel=1) as f:
+    with gzip.open(file_path, mode="wb", compresslevel=0) as f:
         f.write(formatted_data)
 
 
@@ -57,17 +55,17 @@ class TimeSeriesChunkWriter:
             2. Chunks each contiguous segment into the given chunk_size (number of samples to include per file)
 
         Writes each chunk to the given output directory.
-        Channel processing is parallelized using ProcessPoolExecutor for improved performance
-        with datasets containing many channels (64-384 typical in neuroscience).
+        Channel processing is parallelized using ThreadPoolExecutor. Threads share memory
+        (no serialization overhead) and the GIL is released during gzip compression and file I/O.
 
         Args:
             electrical_series: NWB ElectricalSeries object
-            max_workers: Maximum number of worker processes (defaults to CPU count)
+            max_workers: Maximum number of threads (defaults to min(32, cpu_count + 4))
         """
         reader = NWBElectricalSeriesReader(electrical_series, self.session_start_time)
         num_channels = len(reader.channels)
 
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for contiguous_start, contiguous_end in reader.contiguous_chunks():
                 for chunk_start in range(contiguous_start, contiguous_end, self.chunk_size):
                     chunk_end = min(contiguous_end, chunk_start + self.chunk_size)
@@ -75,16 +73,11 @@ class TimeSeriesChunkWriter:
                     start_time = reader.get_timestamp(chunk_start)
                     end_time = reader.get_timestamp(chunk_end - 1)
 
-                    # Read all channel data for this chunk at once from HDF5
-                    # (HDF5 doesn't support efficient concurrent reads)
-                    channel_chunks = [
-                        reader.get_chunk(channel_index, chunk_start, chunk_end) for channel_index in range(num_channels)
-                    ]
+                    channel_chunks = reader.get_chunk(chunk_start, chunk_end)
 
-                    # Submit all channels for parallel processing
                     futures = [
                         executor.submit(
-                            _write_channel_chunk_worker,
+                            _write_channel_chunk,
                             channel_chunks[i],
                             start_time,
                             end_time,
@@ -94,7 +87,6 @@ class TimeSeriesChunkWriter:
                         for i in range(num_channels)
                     ]
 
-                    # Wait for all to complete
                     for future in futures:
                         future.result()
 
@@ -103,21 +95,15 @@ class TimeSeriesChunkWriter:
 
     def write_chunk(self, chunk, start_time, end_time, channel):
         """
-        Formats the chunked sample data into 64-bit (8 byte) values in big-endian.
-
         Writes the chunked sample data to a gzipped binary file.
+
+        Args:
+            chunk: numpy array of sample data
+            start_time: start timestamp in seconds
+            end_time: end timestamp in seconds
+            channel: TimeSeriesChannel object
         """
-        # ensure the samples are 64-bit float-pointing numbers in big-endian before converting to bytes
-        formatted_data = to_big_endian(chunk.astype(np.float64))
-
-        channel_index = "{index:05d}".format(index=channel.index)
-        file_name = "channel-{}_{}_{}{}".format(
-            channel_index, int(start_time * 1e6), int(end_time * 1e6), TIME_SERIES_BINARY_FILE_EXTENSION
-        )
-        file_path = os.path.join(self.output_dir, file_name)
-
-        with gzip.open(file_path, mode="wb", compresslevel=1) as f:
-            f.write(formatted_data)
+        _write_channel_chunk(chunk, start_time, end_time, channel.index, self.output_dir)
 
     def write_channel(self, channel):
         file_name = f"channel-{channel.index:05d}{TIME_SERIES_METADATA_FILE_EXTENSION}"

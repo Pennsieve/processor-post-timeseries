@@ -204,19 +204,35 @@ class NWBElectricalSeriesReader:
         for i in range(len(boundaries) - 1):
             yield boundaries[i], boundaries[i + 1]
 
-    def get_chunk(self, channel_index, start=None, end=None):
+    def get_chunk(self, start=None, end=None):
         """
-        Returns a chunk of sample data from the electrical series
-        for the given channel (index)
+        Returns chunks of sample data across all channels in a single HDF5 read.
 
-        If start and end are not specified the entire channel's data is read into memory.
+        If start and end are not specified all data is read into memory.
 
-        The sample data is scaled by the conversion and offset factors
-        set in the electrical series.
+        HDF5 is optimized for contiguous reads, so reading all channels at once
+        and splitting in memory is much faster than column-by-column access.
+
+        Args:
+            start: Start sample index (default: 0)
+            end: End sample index (default: num_samples)
+
+        Returns:
+            list of numpy arrays, one per channel, with scaling applied
         """
-        scale_factor = self.electrical_series.conversion
+        # Single HDF5 read for all channels
+        all_data = self.electrical_series.data[start:end, :]
 
-        if self.electrical_series.channel_conversion:
-            scale_factor *= self.electrical_series.channel_conversion[channel_index]
+        base_scale = self.electrical_series.conversion
+        offset = self.electrical_series.offset
 
-        return self.electrical_series.data[start:end, channel_index] * scale_factor + self.electrical_series.offset
+        # Apply per-channel scaling if present
+        if self.electrical_series.channel_conversion is not None:
+            channel_scales = np.array(self.electrical_series.channel_conversion) * base_scale
+            # Broadcast multiply: (samples, channels) * (channels,) -> (samples, channels)
+            scaled_data = all_data * channel_scales + offset
+        else:
+            scaled_data = all_data * base_scale + offset
+
+        # Split into list of per-channel arrays
+        return [scaled_data[:, i] for i in range(self.num_channels)]

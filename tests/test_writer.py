@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 from constants import TIME_SERIES_BINARY_FILE_EXTENSION, TIME_SERIES_METADATA_FILE_EXTENSION
 from timeseries_channel import TimeSeriesChannel
-from writer import TimeSeriesChunkWriter, _write_channel_chunk_worker
+from writer import TimeSeriesChunkWriter, _write_channel_chunk
 
 
 class TestTimeSeriesChunkWriterInit:
@@ -186,9 +186,8 @@ class TestWriteElectricalSeries:
         # Create mock electrical series with 500 samples (less than chunk_size)
         mock_reader = Mock()
         mock_reader.channels = [TimeSeriesChannel(index=0, name="Ch0", rate=1000.0, start=0, end=1000)]
-        mock_reader.timestamps = np.linspace(0, 0.5, 500, endpoint=False)
         mock_reader.contiguous_chunks.return_value = [(0, 500)]
-        mock_reader.get_chunk.return_value = np.random.randn(500).astype(np.float64)
+        mock_reader.get_chunk.return_value = [np.random.randn(500).astype(np.float64)]
         mock_reader.get_timestamp.side_effect = lambda idx: float(idx) / 1000.0
 
         with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
@@ -213,9 +212,11 @@ class TestWriteElectricalSeries:
             TimeSeriesChannel(index=0, name="Ch0", rate=1000.0, start=0, end=1000),
             TimeSeriesChannel(index=1, name="Ch1", rate=1000.0, start=0, end=1000),
         ]
-        mock_reader.timestamps = np.linspace(0, 0.25, 250, endpoint=False)
         mock_reader.contiguous_chunks.return_value = [(0, 250)]
-        mock_reader.get_chunk.return_value = np.random.randn(100).astype(np.float64)
+        mock_reader.get_chunk.return_value = [
+            np.random.randn(100).astype(np.float64),
+            np.random.randn(100).astype(np.float64),
+        ]
         mock_reader.get_timestamp.side_effect = lambda idx: float(idx) / 1000.0
 
         with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
@@ -238,11 +239,8 @@ class TestWriteElectricalSeries:
         mock_reader = Mock()
         mock_reader.channels = [TimeSeriesChannel(index=0, name="Ch0", rate=1000.0, start=0, end=1000)]
         # Two contiguous segments
-        timestamps_seg1 = np.linspace(0, 0.1, 100, endpoint=False)
-        timestamps_seg2 = np.linspace(0.2, 0.3, 100, endpoint=False)
-        mock_reader.timestamps = np.concatenate([timestamps_seg1, timestamps_seg2])
         mock_reader.contiguous_chunks.return_value = [(0, 100), (100, 200)]
-        mock_reader.get_chunk.return_value = np.random.randn(100).astype(np.float64)
+        mock_reader.get_chunk.return_value = [np.random.randn(100).astype(np.float64)]
         mock_reader.get_timestamp.side_effect = lambda idx: float(idx) / 1000.0
 
         with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
@@ -263,9 +261,8 @@ class TestWriteElectricalSeries:
         mock_reader.channels = [TimeSeriesChannel(index=0, name="Ch0", rate=1000.0, start=0, end=1000)]
         # 100 samples at 1000 Hz = 0.1 seconds
         timestamps = np.linspace(1.0, 1.1, 100, endpoint=False)
-        mock_reader.timestamps = timestamps
         mock_reader.contiguous_chunks.return_value = [(0, 100)]
-        mock_reader.get_chunk.return_value = np.random.randn(50).astype(np.float64)
+        mock_reader.get_chunk.return_value = [np.random.randn(50).astype(np.float64)]
         mock_reader.get_timestamp.side_effect = lambda idx: float(timestamps[idx])
 
         with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
@@ -349,14 +346,14 @@ class TestWriteChunkEdgeCases:
 class TestParallelProcessing:
     """Tests for parallel channel processing functionality."""
 
-    def test_write_channel_chunk_worker(self, temp_output_dir):
-        """Test the worker function directly."""
+    def test_write_channel_chunk(self, temp_output_dir):
+        """Test the channel chunk write function directly."""
         chunk_data = np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float64)
         start_time = 1.0
         end_time = 1.005
         channel_index = 0
 
-        _write_channel_chunk_worker(chunk_data, start_time, end_time, channel_index, temp_output_dir)
+        _write_channel_chunk(chunk_data, start_time, end_time, channel_index, temp_output_dir)
 
         # Check file was created
         expected_filename = (
@@ -371,10 +368,10 @@ class TestParallelProcessing:
         result = np.frombuffer(data, dtype=">f8")
         np.testing.assert_array_equal(result, [1.0, 2.0, 3.0, 4.0, 5.0])
 
-    def test_write_channel_chunk_worker_big_endian(self, temp_output_dir):
-        """Test that worker function writes data in big-endian format."""
+    def test_write_channel_chunk_big_endian(self, temp_output_dir):
+        """Test that chunk write function outputs big-endian format."""
         chunk_data = np.array([1.5, -2.5], dtype=np.float64)
-        _write_channel_chunk_worker(chunk_data, 0.0, 0.001, 5, temp_output_dir)
+        _write_channel_chunk(chunk_data, 0.0, 0.001, 5, temp_output_dir)
 
         file_path = os.path.join(temp_output_dir, "channel-00005_0_1000.bin.gz")
         with gzip.open(file_path, "rb") as f:
@@ -393,7 +390,7 @@ class TestParallelProcessing:
             TimeSeriesChannel(index=i, name=f"Ch{i}", rate=30000.0, start=0, end=1000) for i in range(num_channels)
         ]
         mock_reader.contiguous_chunks.return_value = [(0, 500)]
-        mock_reader.get_chunk.return_value = np.random.randn(500).astype(np.float64)
+        mock_reader.get_chunk.return_value = [np.random.randn(500).astype(np.float64) for _ in range(num_channels)]
         mock_reader.get_timestamp.side_effect = lambda idx: float(idx) / 30000.0
 
         with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
@@ -418,7 +415,7 @@ class TestParallelProcessing:
             TimeSeriesChannel(index=i, name=f"Ch{i}", rate=1000.0, start=0, end=1000) for i in range(8)
         ]
         mock_reader.contiguous_chunks.return_value = [(0, 500)]
-        mock_reader.get_chunk.return_value = np.random.randn(500).astype(np.float64)
+        mock_reader.get_chunk.return_value = [np.random.randn(500).astype(np.float64) for _ in range(8)]
         mock_reader.get_timestamp.side_effect = lambda idx: float(idx) / 1000.0
 
         with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
@@ -438,14 +435,14 @@ class TestParallelProcessing:
         writer = TimeSeriesChunkWriter(session_start_time, temp_output_dir, chunk_size=100)
 
         # Create distinct data for each channel
-        channel_data = {i: np.arange(100, dtype=np.float64) + i * 1000 for i in range(num_channels)}
+        channel_data = [np.arange(100, dtype=np.float64) + i * 1000 for i in range(num_channels)]
 
         mock_reader = Mock()
         mock_reader.channels = [
             TimeSeriesChannel(index=i, name=f"Ch{i}", rate=1000.0, start=0, end=1000) for i in range(num_channels)
         ]
         mock_reader.contiguous_chunks.return_value = [(0, 100)]
-        mock_reader.get_chunk.side_effect = lambda ch_idx, start, end: channel_data[ch_idx]
+        mock_reader.get_chunk.return_value = channel_data
         mock_reader.get_timestamp.side_effect = lambda idx: float(idx) / 1000.0
 
         with patch("writer.NWBElectricalSeriesReader", return_value=mock_reader):
