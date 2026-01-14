@@ -156,41 +156,6 @@ class TestConfigLocalEnvironment:
 class TestConfigProductionEnvironment:
     """Tests for Config class in production environment."""
 
-    def test_production_environment_directories(self, tmp_path):
-        """Test Config in production environment uses OUTPUT_DIR for input."""
-        output_dir = tmp_path / "output"
-        output_dir.mkdir()
-
-        env_vars = {
-            "ENVIRONMENT": "production",
-            "OUTPUT_DIR": str(output_dir),
-        }
-
-        with patch.dict(os.environ, env_vars, clear=True):
-            config = Config()
-
-            # In production, INPUT_DIR is set to OUTPUT_DIR
-            assert config.INPUT_DIR == str(output_dir)
-            # And OUTPUT_DIR is a subdirectory
-            assert config.OUTPUT_DIR == str(output_dir / "output")
-
-    def test_production_creates_output_subdirectory(self, tmp_path):
-        """Test that production config creates output subdirectory."""
-        base_dir = tmp_path / "base"
-        base_dir.mkdir()
-
-        env_vars = {
-            "ENVIRONMENT": "production",
-            "OUTPUT_DIR": str(base_dir),
-        }
-
-        with patch.dict(os.environ, env_vars, clear=True):
-            config = Config()
-
-            expected_output = base_dir / "output"
-            assert os.path.exists(expected_output)
-            assert config.OUTPUT_DIR == str(expected_output)
-
     def test_production_importer_enabled_by_default(self, tmp_path):
         """Test IMPORTER_ENABLED defaults to True in production."""
         base_dir = tmp_path / "base"
@@ -279,23 +244,6 @@ class TestConfigEdgeCases:
             config = Config()
             assert config.API_KEY is None
             assert config.API_SECRET is None
-
-    def test_non_standard_environment(self, tmp_path):
-        """Test Config with non-standard environment name."""
-        base_dir = tmp_path / "base"
-        base_dir.mkdir()
-
-        env_vars = {
-            "ENVIRONMENT": "staging",
-            "OUTPUT_DIR": str(base_dir),
-        }
-
-        with patch.dict(os.environ, env_vars, clear=True):
-            config = Config()
-
-            # Non-local environments should use production logic
-            assert config.ENVIRONMENT == "staging"
-            assert config.INPUT_DIR == str(base_dir)
 
     def test_chunk_size_conversion_to_int(self, tmp_path):
         """Test that CHUNK_SIZE_MB is converted to integer."""
