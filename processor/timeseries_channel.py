@@ -1,4 +1,7 @@
 class TimeSeriesChannel:
+    # Unit is always microvolts - data is converted to uV during processing
+    UNIT = "uV"
+
     def __init__(
         self,
         index,
@@ -7,7 +10,6 @@ class TimeSeriesChannel:
         start,
         end,
         type="CONTINUOUS",
-        unit="uV",
         group="default",
         last_annotation=0,
         properties=None,
@@ -27,7 +29,6 @@ class TimeSeriesChannel:
         self.start = int(start)
         self.end = int(end)
 
-        self.unit = unit.strip()
         self.type = type.upper()
         self.group = group.strip()
         self.last_annotation = last_annotation
@@ -38,7 +39,7 @@ class TimeSeriesChannel:
             "name": self.name,
             "start": self.start,
             "end": self.end,
-            "unit": self.unit,
+            "unit": self.UNIT,
             "rate": self.rate,
             "type": self.type,
             "group": self.group,
@@ -53,11 +54,11 @@ class TimeSeriesChannel:
 
     @staticmethod
     def from_dict(channel, properties=None):
+        # Note: channel["unit"] is ignored - unit is always uV
         return TimeSeriesChannel(
             name=channel["name"],
             start=int(channel["start"]),
             end=int(channel["end"]),
-            unit=channel["unit"],
             rate=channel["rate"],
             type=channel.get("channelType", channel.get("type")),
             group=channel["group"],

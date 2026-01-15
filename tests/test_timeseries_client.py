@@ -76,7 +76,7 @@ class TestTimeSeriesClientCreateChannel:
 
         client = TimeSeriesClient("https://api.test.com", mock_session_manager)
         channel = TimeSeriesChannel(
-            index=0, name="Ch1", rate=1000.0, start=0, end=1000, type="UNIT", unit="mV", group="test_group"
+            index=0, name="Ch1", rate=1000.0, start=0, end=1000, type="UNIT", group="test_group"
         )
 
         client.create_channel("pkg-123", channel)
@@ -86,7 +86,7 @@ class TestTimeSeriesClientCreateChannel:
         assert body["rate"] == 1000.0
         assert body["channelType"] == "UNIT"  # 'type' should be renamed to 'channelType'
         assert "type" not in body  # Original 'type' key should be removed
-        assert body["unit"] == "mV"
+        assert body["unit"] == "uV"  # unit is always uV
         assert body["group"] == "test_group"
 
     @responses.activate

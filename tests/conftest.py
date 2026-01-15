@@ -94,6 +94,7 @@ def mock_electrical_series(sample_electrical_series_data, sample_timestamps):
     series.conversion = 1.0
     series.offset = 0.0
     series.channel_conversion = None
+    series.unit = "volts"
 
     # Mock electrodes table
     mock_electrodes = []
