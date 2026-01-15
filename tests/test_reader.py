@@ -15,6 +15,7 @@ def create_mock_electrical_series(
     offset=0.0,
     channel_conversion=None,
     group_names=None,
+    unit="microvolts",
 ):
     """Helper to create mock ElectricalSeries objects."""
     series = Mock()
@@ -29,6 +30,7 @@ def create_mock_electrical_series(
     series.conversion = conversion
     series.offset = offset
     series.channel_conversion = channel_conversion
+    series.unit = unit
 
     # Create mock electrodes as a Mock object that can be iterated and has table attribute
     mock_electrode_list = []
@@ -307,3 +309,29 @@ class TestGetAllChannelsChunk:
         # Result: data * conversion * channel_conversion + offset
         np.testing.assert_array_equal(chunks[0], np.ones(10) * 7.0)  # 1 * 2 * 3 + 1 = 7
         np.testing.assert_array_equal(chunks[1], np.ones(10) * 9.0)  # 1 * 2 * 4 + 1 = 9
+
+    def test_volts_to_microvolts_conversion(self):
+        """Test that data in volts is converted to microvolts."""
+        series = create_mock_electrical_series(10, 2, rate=1000.0, unit="volts")
+        series.data = np.ones((10, 2)) * 1e-6  # 1 microvolt in volts
+        session_start = datetime(2023, 1, 1, 12, 0, 0)
+
+        reader = NWBElectricalSeriesReader(series, session_start)
+        chunks = reader.get_chunk()
+
+        # 1e-6 V * 1e6 = 1 uV
+        for chunk in chunks:
+            np.testing.assert_array_almost_equal(chunk, np.ones(10) * 1.0)
+
+    def test_millivolts_to_microvolts_conversion(self):
+        """Test that data in millivolts is converted to microvolts."""
+        series = create_mock_electrical_series(10, 2, rate=1000.0, unit="millivolts")
+        series.data = np.ones((10, 2)) * 0.001  # 1 microvolt in millivolts
+        session_start = datetime(2023, 1, 1, 12, 0, 0)
+
+        reader = NWBElectricalSeriesReader(series, session_start)
+        chunks = reader.get_chunk()
+
+        # 0.001 mV * 1e3 = 1 uV
+        for chunk in chunks:
+            np.testing.assert_array_almost_equal(chunk, np.ones(10) * 1.0)

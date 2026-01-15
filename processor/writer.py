@@ -89,8 +89,8 @@ class TimeSeriesChunkWriter:
 
         file_name = "channel-{}_{}_{}{}".format(
             "{index:05d}".format(index=channel_index),
-            int(start_time * 1e6),
-            int(end_time * 1e6),
+            round(start_time * 1e6),
+            round(end_time * 1e6),
             TIME_SERIES_BINARY_FILE_EXTENSION,
         )
         file_path = os.path.join(output_dir, file_name)

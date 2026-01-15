@@ -7,6 +7,16 @@ from utils import infer_sampling_rate
 
 log = logging.getLogger()
 
+# Conversion factors to microvolts (uV)
+UNIT_TO_UV = {
+    "volts": 1e6,
+    "v": 1e6,
+    "millivolts": 1e3,
+    "mv": 1e3,
+    "microvolts": 1,
+    "uv": 1,
+}
+
 
 class NWBElectricalSeriesReader:
     """
@@ -223,7 +233,7 @@ class NWBElectricalSeriesReader:
             end: End sample index (default: num_samples)
 
         Returns:
-            list of numpy arrays, one per channel, with scaling applied
+            list of numpy arrays, one per channel, with scaling applied in uV
         """
         # Single HDF5 read for all channels
         all_data = self.electrical_series.data[start:end, :]
@@ -238,6 +248,22 @@ class NWBElectricalSeriesReader:
             scaled_data = all_data * channel_scales + offset
         else:
             scaled_data = all_data * base_scale + offset
+
+        # Convert volts to microvolts (uV)
+        # This processor fixes the TimeSeriesChannel unit to uV.
+        # NWB conversion factor outputs values in the unit specified by electrical_series.unit (fixed to 'volts'; see docstring below)
+        # From: https://github.com/NeurodataWithoutBorders/nwb-schema/blob/d65d42257003543c569ea7ac0cd6d7aee01c88d6/core/nwb.ecephys.yaml#L35-L42
+        #     - name: unit
+        #       dtype: text
+        #       value: volts
+        #       doc: Base unit of measurement for working with the data. This value is fixed to
+        #         'volts'. Actual stored values are not necessarily stored in these units. To
+        #         access the data in these units, multiply 'data' by 'conversion', followed by
+        #         'channel_conversion' (if present), and then add 'offset'.
+        unit = getattr(self.electrical_series, "unit", "volts").lower()
+        if unit not in UNIT_TO_UV:
+            raise ValueError(f"Unknown unit '{unit}' - expected one of: {list(UNIT_TO_UV.keys())}")
+        scaled_data = scaled_data * UNIT_TO_UV[unit]
 
         # Split into list of per-channel arrays
         return [scaled_data[:, i] for i in range(self.num_channels)]

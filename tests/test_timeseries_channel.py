@@ -15,7 +15,7 @@ class TestTimeSeriesChannelInit:
         assert channel.start == 1000000
         assert channel.end == 2000000
         assert channel.type == "CONTINUOUS"
-        assert channel.unit == "uV"
+        assert TimeSeriesChannel.UNIT == "uV"
         assert channel.group == "default"
         assert channel.last_annotation == 0
         assert channel.properties == []
@@ -30,7 +30,6 @@ class TestTimeSeriesChannelInit:
             start=500000,
             end=1500000,
             type="UNIT",
-            unit="  mV  ",
             group="  electrode_group  ",
             last_annotation=100,
             properties=[{"key": "value"}],
@@ -43,7 +42,7 @@ class TestTimeSeriesChannelInit:
         assert channel.start == 500000
         assert channel.end == 1500000
         assert channel.type == "UNIT"  # should be uppercased
-        assert channel.unit == "mV"  # should be stripped
+        assert TimeSeriesChannel.UNIT == "uV"  # unit is always uV
         assert channel.group == "electrode_group"  # should be stripped
         assert channel.last_annotation == 100
         assert channel.properties == [{"key": "value"}]
@@ -124,7 +123,7 @@ class TestTimeSeriesChannelFromDict:
         assert channel.name == "Channel 1"
         assert channel.start == 1000000
         assert channel.end == 2000000
-        assert channel.unit == "uV"
+        assert TimeSeriesChannel.UNIT == "uV"  # unit is always uV
         assert channel.rate == 30000.0
         assert channel.type == "CONTINUOUS"
         assert channel.group == "default"
@@ -281,7 +280,6 @@ class TestTimeSeriesChannelRoundTrip:
             start=500000,
             end=1500000,
             type="UNIT",
-            unit="mV",
             group="test_group",
             last_annotation=50,
             properties=[{"key": "value"}],
@@ -296,7 +294,7 @@ class TestTimeSeriesChannelRoundTrip:
         assert restored.start == original.start
         assert restored.end == original.end
         assert restored.type == original.type
-        assert restored.unit == original.unit
+        assert serialized["unit"] == "uV"  # unit is always uV in serialized output
         assert restored.group == original.group
         assert restored.last_annotation == original.last_annotation
         assert restored.properties == original.properties

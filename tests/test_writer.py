@@ -34,9 +34,9 @@ class TestWriteChunk:
 
         TimeSeriesChunkWriter.write_chunk(chunk, start_time, end_time, 0, temp_output_dir)
 
-        # Check file was created
+        # Check file was created (use round() to match writer behavior)
         expected_filename = (
-            f"channel-00000_{int(start_time * 1e6)}_{int(end_time * 1e6)}{TIME_SERIES_BINARY_FILE_EXTENSION}"
+            f"channel-00000_{round(start_time * 1e6)}_{round(end_time * 1e6)}{TIME_SERIES_BINARY_FILE_EXTENSION}"
         )
         file_path = os.path.join(temp_output_dir, expected_filename)
         assert os.path.exists(file_path)
@@ -116,7 +116,7 @@ class TestWriteChannel:
         writer = TimeSeriesChunkWriter(session_start_time, temp_output_dir, 1000)
 
         channel = TimeSeriesChannel(
-            index=5, name="Test Channel", rate=30000.0, start=1000000, end=2000000, unit="mV", group="electrode_group"
+            index=5, name="Test Channel", rate=30000.0, start=1000000, end=2000000, group="electrode_group"
         )
 
         writer.write_channel(channel)
@@ -135,7 +135,6 @@ class TestWriteChannel:
             rate=30000.0,
             start=1000000,
             end=2000000,
-            unit="mV",
             type="CONTINUOUS",
             group="test_group",
             last_annotation=100,
@@ -153,7 +152,7 @@ class TestWriteChannel:
         assert data["rate"] == 30000.0
         assert data["start"] == 1000000
         assert data["end"] == 2000000
-        assert data["unit"] == "mV"
+        assert data["unit"] == "uV"  # unit is always uV
         assert data["type"] == "CONTINUOUS"
         assert data["group"] == "test_group"
         assert data["lastAnnotation"] == 100
