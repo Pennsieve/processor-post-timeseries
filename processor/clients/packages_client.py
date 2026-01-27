@@ -52,16 +52,13 @@ class PackagesClient(BaseClient):
             raise e
 
     @BaseClient.retry_with_refresh
-    def update_properties(self, package_id: str, properties: list[dict]) -> int:
+    def update_properties(self, package_id: str, properties: list[dict]) -> None:
         """
         Updates a package's properties on the Pennsieve API.
 
         Args:
             package_id: The package (node) ID
             properties: List of property dicts with keys: key, value, dataType, category, fixed, hidden
-
-        Returns:
-            int: The HTTP status code from the response
         """
         url = f"{self.api_host}/packages/{package_id}?updateStorage=true"
 
@@ -74,34 +71,19 @@ class PackagesClient(BaseClient):
         }
 
         try:
-            log.info("Updating package %s properties via %s", package_id, url)
-            log.info("Property payload: %s", payload)
             response = requests.put(url, json=payload, headers=headers)
-            log.info(
-                "Package %s properties update status: %s %s",
-                package_id,
-                response.status_code,
-                response.reason,
-            )
-            if response.text:
-                log.info("Property update response body: %s", response.text)
-            return response.status_code
-        except requests.HTTPError as e:
+            response.raise_for_status()
+            return None
+        except Exception as e:
             log.error(f"failed to update package {package_id} properties: {e}")
             raise e
-        except Exception as e:
-            log.error(f"failed to update package properties: {e}")
-            raise e
 
-    def set_timeseries_properties(self, package_id: str) -> int:
+    def set_timeseries_properties(self, package_id: str) -> None:
         """
-        Sets the timeseries viewer properties on a package.
+        Sets the time series viewer properties on a package.
 
         Args:
             package_id: The package (node) ID
-
-        Returns:
-            int: The HTTP status code from the response
         """
         properties = [
             {
