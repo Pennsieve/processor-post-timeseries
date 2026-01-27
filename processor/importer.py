@@ -156,22 +156,6 @@ def import_timeseries(api_host, api2_host, api_key, api_secret, workflow_instanc
     assert sum(successful_uploads) == len(import_files), "Failed to upload all time series files"
 
 
-def find_first_package_id(package_ids: list[str]) -> Optional[str]:
-    """
-    Find the first package ID with 'N:package:' prefix from a list of package IDs.
-
-    Args:
-        package_ids: List of package IDs
-
-    Returns:
-        The first package ID with 'N:package:' prefix, or None if not found
-    """
-    for package_id in package_ids:
-        if package_id.startswith("N:package:"):
-            return package_id
-    return None
-
-
 def determine_target_package(packages_client: PackagesClient, package_ids: list[str]) -> Optional[str]:
     """
     Determine which package should receive the time series data and properties.
@@ -195,8 +179,12 @@ def determine_target_package(packages_client: PackagesClient, package_ids: list[
         log.info("Single package ID found, using it directly: %s", package_ids[0])
         return package_ids[0]
 
-    # Multiple package IDs - find first N:package: and get its parent
-    first_package = find_first_package_id(package_ids)
+    first_package = None
+    for package_id in package_ids:
+        if package_id.startswith("N:package:"):
+            first_package = package_id
+            break
+
     if first_package is None:
         log.warning("No package ID with 'N:package:' prefix found in: %s", package_ids)
         return None

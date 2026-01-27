@@ -2,73 +2,7 @@ from unittest.mock import Mock
 
 import responses
 from clients.packages_client import PackagesClient
-from importer import determine_target_package, find_first_package_id
-
-
-class TestFindFirstPackageId:
-    """Tests for find_first_package_id function."""
-
-    def test_finds_first_package_with_prefix(self):
-        """Test finding first package ID with N:package: prefix."""
-        package_ids = [
-            "N:collection:abc-123",
-            "N:package:def-456",
-            "N:package:ghi-789",
-        ]
-
-        result = find_first_package_id(package_ids)
-
-        assert result == "N:package:def-456"
-
-    def test_returns_none_when_no_package_prefix(self):
-        """Test returns None when no N:package: prefix found."""
-        package_ids = [
-            "N:collection:abc-123",
-            "N:dataset:def-456",
-            "some-other-id",
-        ]
-
-        result = find_first_package_id(package_ids)
-
-        assert result is None
-
-    def test_returns_none_for_empty_list(self):
-        """Test returns None for empty list."""
-        result = find_first_package_id([])
-
-        assert result is None
-
-    def test_returns_first_even_if_multiple_packages(self):
-        """Test returns first package even when multiple exist."""
-        package_ids = [
-            "N:package:first-111",
-            "N:package:second-222",
-            "N:package:third-333",
-        ]
-
-        result = find_first_package_id(package_ids)
-
-        assert result == "N:package:first-111"
-
-    def test_single_package_id(self):
-        """Test with single package ID."""
-        package_ids = ["N:package:only-one"]
-
-        result = find_first_package_id(package_ids)
-
-        assert result == "N:package:only-one"
-
-    def test_case_sensitive_prefix(self):
-        """Test that prefix matching is case-sensitive."""
-        package_ids = [
-            "n:package:lowercase",  # lowercase n
-            "N:PACKAGE:uppercase",  # uppercase PACKAGE
-            "N:package:correct",
-        ]
-
-        result = find_first_package_id(package_ids)
-
-        assert result == "N:package:correct"
+from importer import determine_target_package
 
 
 class TestDetermineTargetPackage:
