@@ -5,10 +5,19 @@ import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Lock, Value
+from typing import Optional
 
 import backoff
 import requests
-from clients import AuthenticationClient, ImportClient, ImportFile, SessionManager, TimeSeriesClient, WorkflowClient
+from clients import (
+    AuthenticationClient,
+    ImportClient,
+    ImportFile,
+    PackagesClient,
+    SessionManager,
+    TimeSeriesClient,
+    WorkflowClient,
+)
 from constants import TIME_SERIES_BINARY_FILE_EXTENSION, TIME_SERIES_METADATA_FILE_EXTENSION
 from timeseries_channel import TimeSeriesChannel
 
@@ -49,10 +58,15 @@ def import_timeseries(api_host, api2_host, api_key, api_secret, workflow_instanc
     workflow_client = WorkflowClient(api2_host, session_manager)
     workflow_instance = workflow_client.get_workflow_instance(workflow_instance_id)
 
-    # constraint until we implement (upstream) performing imports over directories
-    # and specifying how to group time series files together into an imported package
-    assert len(workflow_instance.package_ids) == 1, "NWB post processor only supports a single package for import"
-    package_id = workflow_instance.package_ids[0]
+    # fetch the target package for channel data and time series properties
+    packages_client = PackagesClient(api_host, session_manager)
+    package_id = determine_target_package(packages_client, workflow_instance.package_ids)
+    if not package_id:
+        log.error("dataset_id={workflow_instance.dataset_id} could not determine target time series package")
+        return None
+
+    packages_client.set_timeseries_properties(package_id)
+    log.info(f"updated package {package_id} with time series properties")
 
     log.info(f"dataset_id={workflow_instance.dataset_id} package_id={package_id} starting import of time series files")
 
@@ -140,3 +154,58 @@ def import_timeseries(api_host, api2_host, api_key, api_secret, workflow_instanc
     log.info(f"import_id={import_id} uploaded {upload_counter.value} time series files")
 
     assert sum(successful_uploads) == len(import_files), "Failed to upload all time series files"
+
+
+def find_first_package_id(package_ids: list[str]) -> Optional[str]:
+    """
+    Find the first package ID with 'N:package:' prefix from a list of package IDs.
+
+    Args:
+        package_ids: List of package IDs
+
+    Returns:
+        The first package ID with 'N:package:' prefix, or None if not found
+    """
+    for package_id in package_ids:
+        if package_id.startswith("N:package:"):
+            return package_id
+    return None
+
+
+def determine_target_package(packages_client: PackagesClient, package_ids: list[str]) -> Optional[str]:
+    """
+    Determine which package should receive the time series data and properties.
+
+    If there's only one package ID, use that package directly.
+    If there are multiple package IDs, find the first one with 'N:package:' prefix
+    and get its parent package ID.
+
+    Args:
+        packages_client: PackagesClient instance for API calls
+        package_ids: List of package IDs from the workflow instance
+
+    Returns:
+        The package ID to update with properties, or None if unable to determine
+    """
+    if not package_ids:
+        log.warning("No package IDs provided")
+        return None
+
+    if len(package_ids) == 1:
+        log.info("Single package ID found, using it directly: %s", package_ids[0])
+        return package_ids[0]
+
+    # Multiple package IDs - find first N:package: and get its parent
+    first_package = find_first_package_id(package_ids)
+    if first_package is None:
+        log.warning("No package ID with 'N:package:' prefix found in: %s", package_ids)
+        return None
+
+    log.info("Multiple package IDs found, getting parent of first package: %s", first_package)
+    try:
+        parent_id = packages_client.get_parent_package_id(first_package)
+        log.info("Parent package ID: %s", parent_id)
+        return parent_id
+    except Exception as e:
+        log.error("Failed to get parent package ID: %s", e)
+        return None

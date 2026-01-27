@@ -73,7 +73,7 @@ class NWBElectricalSeriesReader:
         TimeSeries objects but its worth handling this case by validating the
         sampling_rate against the timestamps if this case does somehow appear.
         """
-        if self.electrical_series.rate is None and not self.has_explicit_timestamps():
+        if self.electrical_series.rate is None and not self.has_explicit_timestamps:
             raise Exception("electrical series has no defined sampling rate or timestamp values")
 
         # if both the timestamps and rate properties are set on the electrical
