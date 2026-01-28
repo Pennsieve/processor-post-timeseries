@@ -34,9 +34,9 @@ class TestWriteChunk:
 
         TimeSeriesChunkWriter.write_chunk(chunk, start_time, end_time, 0, temp_output_dir)
 
-        # Check file was created (use round() to match writer behavior)
+        # Check file was created (use int() to match writer behavior)
         expected_filename = (
-            f"channel-00000_{round(start_time * 1e6)}_{round(end_time * 1e6)}{TIME_SERIES_BINARY_FILE_EXTENSION}"
+            f"channel-00000_{int(start_time * 1e6)}_{int(end_time * 1e6)}{TIME_SERIES_BINARY_FILE_EXTENSION}"
         )
         file_path = os.path.join(temp_output_dir, expected_filename)
         assert os.path.exists(file_path)

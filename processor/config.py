@@ -9,7 +9,6 @@ class Config:
         self.INPUT_DIR = os.getenv("INPUT_DIR")
         self.OUTPUT_DIR = os.getenv("OUTPUT_DIR")
 
-
         self.CHUNK_SIZE_MB = int(os.getenv("CHUNK_SIZE_MB", "1"))
 
         # continue to use INTEGRATION_ID environment variable until runner

@@ -43,14 +43,19 @@ class NWBElectricalSeriesReader:
         assert (
             len(self.electrical_series.electrodes.table) == self.num_channels
         ), "Electrode channels do not align with data shape"
+        log.info(f"NWB file has {self.num_samples} samples")
 
         self._sampling_rate = None
         self._compute_sampling_rate()
+        log.info(f"NWB file has sampling rate: {self.sampling_rate} Hz")
 
         if self.has_explicit_timestamps:
+            log.info("NWB file has explicit timestamps")
             assert self.num_samples == len(
                 self.electrical_series.timestamps
             ), "Differing number of sample and timestamp value"
+        else:
+            log.info("NWB file has implicit timestamps")
 
         self._channels = None
 
@@ -68,7 +73,7 @@ class NWBElectricalSeriesReader:
         TimeSeries objects but its worth handling this case by validating the
         sampling_rate against the timestamps if this case does somehow appear.
         """
-        if self.electrical_series.rate is None and self.electrical_series.timestamps is None:
+        if self.electrical_series.rate is None and not self.has_explicit_timestamps:
             raise Exception("electrical series has no defined sampling rate or timestamp values")
 
         # if both the timestamps and rate properties are set on the electrical
@@ -78,7 +83,7 @@ class NWBElectricalSeriesReader:
             sampling_rate = self.electrical_series.rate
 
             sample_size = min(10000, self.num_samples)
-            sample_timestamps = self.electrical_series.timestamps[:sample_size]
+            sample_timestamps = self.get_timestamps(0, sample_size)
             inferred_sampling_rate = infer_sampling_rate(sample_timestamps)
 
             error = abs(inferred_sampling_rate - sampling_rate) * (1.0 / sampling_rate)
@@ -97,7 +102,7 @@ class NWBElectricalSeriesReader:
         # if only the timestamps are given, calculate the sampling rate using a sample of timestamps
         elif self.has_explicit_timestamps:
             sample_size = min(10000, self.num_samples)
-            sample_timestamps = self.electrical_series.timestamps[:sample_size]
+            sample_timestamps = self.get_timestamps(0, sample_size)
             self._sampling_rate = round(infer_sampling_rate(sample_timestamps))
 
     def get_timestamp(self, index):
@@ -199,7 +204,7 @@ class NWBElectricalSeriesReader:
 
         for batch_start in range(0, self.num_samples, batch_size):
             batch_end = min(batch_start + batch_size, self.num_samples)
-            batch_timestamps = self.electrical_series.timestamps[batch_start:batch_end]
+            batch_timestamps = self.get_timestamps(batch_start, batch_end)
 
             # check gap between batches
             if prev_timestamp is not None:
