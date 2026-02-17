@@ -38,6 +38,7 @@ class AuthenticationClient:
             aws_secret_access_key="",
         )
 
+    # legacy: no longer used in production; auth is now done via session/refresh tokens
     def authenticate(self, api_key, api_secret):
         try:
             config = self._get_cognito_config()
