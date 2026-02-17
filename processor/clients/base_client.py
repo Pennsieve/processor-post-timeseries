@@ -17,12 +17,15 @@ class SessionManager:
         return self.__session_token
 
     def refresh_session(self):
-        if self.authentication_client is None or self.refresh_token is None:
-            log.warning("session refresh is not available: no authentication client or refresh token configured")
+        if self.authentication_client is None:
+            log.warning("session refresh is not available: no authentication client configured")
             return
 
-        log.info("refreshing session token using refresh token")
-        self.__session_token = self.authentication_client.refresh(self.refresh_token)
+        if self.refresh_token:
+            log.info("refreshing session token using refresh token")
+            self.__session_token = self.authentication_client.refresh(self.refresh_token)
+        else:
+            log.warning("session refresh is not available: no refresh token configured")
 
 
 class BaseClient:

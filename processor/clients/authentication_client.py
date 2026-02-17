@@ -62,8 +62,10 @@ class AuthenticationClient:
                 ClientId=cognito_app_client_id,
             )
 
-            access_token = login_response["AuthenticationResult"]["AccessToken"]
-            return access_token
+            auth_result = login_response["AuthenticationResult"]
+            access_token = auth_result["AccessToken"]
+            refresh_token = auth_result["RefreshToken"]
+            return access_token, refresh_token
         except requests.HTTPError as e:
             log.error(f"failed to reach authentication server with error: {e}")
             raise e

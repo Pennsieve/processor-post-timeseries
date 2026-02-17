@@ -33,14 +33,18 @@ class TestAuthenticationClientAuthenticate:
         # Mock boto3 cognito client
         mock_cognito_client = Mock()
         mock_cognito_client.initiate_auth.return_value = {
-            "AuthenticationResult": {"AccessToken": "test-access-token-12345"}
+            "AuthenticationResult": {
+                "AccessToken": "test-access-token-12345",
+                "RefreshToken": "test-refresh-token-67890",
+            }
         }
 
         with patch("clients.authentication_client.boto3.client", return_value=mock_cognito_client):
             client = AuthenticationClient("https://api.test.com")
-            token = client.authenticate("api-key", "api-secret")
+            access_token, refresh_token = client.authenticate("api-key", "api-secret")
 
-        assert token == "test-access-token-12345"
+        assert access_token == "test-access-token-12345"
+        assert refresh_token == "test-refresh-token-67890"
 
     @responses.activate
     def test_authenticate_calls_cognito_with_correct_params(self):
@@ -53,7 +57,9 @@ class TestAuthenticationClientAuthenticate:
         )
 
         mock_cognito_client = Mock()
-        mock_cognito_client.initiate_auth.return_value = {"AuthenticationResult": {"AccessToken": "token"}}
+        mock_cognito_client.initiate_auth.return_value = {
+            "AuthenticationResult": {"AccessToken": "token", "RefreshToken": "refresh"}
+        }
 
         with patch("clients.authentication_client.boto3.client", return_value=mock_cognito_client) as mock_boto:
             client = AuthenticationClient("https://api.test.com")
@@ -119,7 +125,7 @@ class TestAuthenticationClientAuthenticate:
 
     @responses.activate
     def test_authenticate_extracts_access_token(self):
-        """Test that access token is correctly extracted from response."""
+        """Test that tokens are correctly extracted from full response."""
         responses.add(
             responses.GET,
             "https://api.test.com/authentication/cognito-config",
@@ -139,10 +145,10 @@ class TestAuthenticationClientAuthenticate:
 
         with patch("clients.authentication_client.boto3.client", return_value=mock_cognito_client):
             client = AuthenticationClient("https://api.test.com")
-            token = client.authenticate("key", "secret")
+            access_token, refresh_token = client.authenticate("key", "secret")
 
-        # Should return only the access token
-        assert token == "the-access-token"
+        assert access_token == "the-access-token"
+        assert refresh_token == "refresh-token"
 
 
 class TestAuthenticationClientEdgeCases:
@@ -159,7 +165,9 @@ class TestAuthenticationClientEdgeCases:
         )
 
         mock_cognito_client = Mock()
-        mock_cognito_client.initiate_auth.return_value = {"AuthenticationResult": {"AccessToken": "token"}}
+        mock_cognito_client.initiate_auth.return_value = {
+            "AuthenticationResult": {"AccessToken": "token", "RefreshToken": "refresh"}
+        }
 
         with patch("clients.authentication_client.boto3.client", return_value=mock_cognito_client):
             client = AuthenticationClient("https://api.test.com")
@@ -184,7 +192,9 @@ class TestAuthenticationClientEdgeCases:
             )
 
             mock_cognito_client = Mock()
-            mock_cognito_client.initiate_auth.return_value = {"AuthenticationResult": {"AccessToken": "token"}}
+            mock_cognito_client.initiate_auth.return_value = {
+                "AuthenticationResult": {"AccessToken": "token", "RefreshToken": "refresh"}
+            }
 
             with patch("clients.authentication_client.boto3.client", return_value=mock_cognito_client) as mock_boto:
                 client = AuthenticationClient("https://api.test.com")

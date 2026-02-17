@@ -34,7 +34,9 @@ for import into Pennsieve data ecosystem.
 """
 
 
-def import_timeseries(api_host, api2_host, session_token, refresh_token, workflow_instance_id, file_directory):
+def import_timeseries(
+    api_host, api2_host, session_token, refresh_token, workflow_instance_id, file_directory
+):
     # gather all the time series files from the output directory
     timeseries_data_files = []
     timeseries_channel_files = []

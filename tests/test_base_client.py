@@ -50,10 +50,10 @@ class TestSessionManager:
         mock_auth_client.refresh.assert_called_once_with("my-refresh-token")
         assert manager.session_token == "new-access-token"
 
-    def test_refresh_session_without_refresh_token_does_not_call_auth(self):
-        """Test that refresh_session does nothing when refresh token is missing."""
+    def test_refresh_session_no_refresh_token_does_not_crash(self):
+        """Test that refresh_session logs a warning when auth client exists but no refresh token."""
         mock_auth_client = Mock()
-        manager = SessionManager("my-token", authentication_client=mock_auth_client, refresh_token=None)
+        manager = SessionManager("my-token", authentication_client=mock_auth_client)
 
         manager.refresh_session()
 
