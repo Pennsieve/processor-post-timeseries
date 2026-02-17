@@ -38,30 +38,6 @@ class AuthenticationClient:
             aws_secret_access_key="",
         )
 
-    # legacy: no longer used in production; auth is now done via session/refresh tokens
-    def authenticate(self, api_key, api_secret):
-        try:
-            config = self._get_cognito_config()
-            cognito_idp_client = self._get_cognito_client()
-
-            login_response = cognito_idp_client.initiate_auth(
-                AuthFlow="USER_PASSWORD_AUTH",
-                AuthParameters={"USERNAME": api_key, "PASSWORD": api_secret},
-                ClientId=config["app_client_id"],
-            )
-
-            access_token = login_response["AuthenticationResult"]["AccessToken"]
-            return access_token
-        except requests.HTTPError as e:
-            log.error(f"failed to reach authentication server with error: {e}")
-            raise e
-        except json.JSONDecodeError as e:
-            log.error(f"failed to decode authentication response with error: {e}")
-            raise e
-        except Exception as e:
-            log.error(f"failed to authenticate with error: {e}")
-            raise e
-
     def refresh(self, refresh_token):
         """Use a Cognito refresh token to obtain a new access token."""
         try:
