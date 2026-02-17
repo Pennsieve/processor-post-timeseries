@@ -24,7 +24,7 @@ class Config:
         self.API_HOST2 = os.getenv("PENNSIEVE_API_HOST2", "https://api2.pennsieve.net")
 
         # fall back to API key/secret auth for local development or when no session token is provided
-        if self.SESSION_TOKEN is None or self.ENVIRONMENT == "local":
+        if self.SESSION_TOKEN is None and self.ENVIRONMENT == "local":
             api_key = os.getenv("PENNSIEVE_API_KEY")
             api_secret = os.getenv("PENNSIEVE_API_SECRET")
             if api_key and api_secret:
