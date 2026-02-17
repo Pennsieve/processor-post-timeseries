@@ -54,14 +54,6 @@ def mock_session_manager():
 
 
 @pytest.fixture
-def mock_authentication_client():
-    """Mock authentication client."""
-    client = Mock()
-    client.authenticate = Mock(return_value="mock-access-token")
-    return client
-
-
-@pytest.fixture
 def sample_timestamps():
     """Sample evenly-spaced timestamps at 1000 Hz."""
     return np.linspace(0, 1.0, 1000, endpoint=False)

@@ -123,21 +123,21 @@ class TestConfigLocalEnvironment:
             assert config.API_HOST == "https://custom.api.com"
             assert config.API_HOST2 == "https://custom.api2.com"
 
-    def test_local_environment_api_credentials(self, tmp_path):
-        """Test API credentials loading."""
+    def test_local_environment_session_tokens(self, tmp_path):
+        """Test session token loading."""
         env_vars = {
             "ENVIRONMENT": "local",
             "INPUT_DIR": str(tmp_path),
             "OUTPUT_DIR": str(tmp_path),
-            "PENNSIEVE_API_KEY": "test-api-key",
-            "PENNSIEVE_API_SECRET": "test-api-secret",
+            "SESSION_TOKEN": "test-session-token",
+            "REFRESH_TOKEN": "test-refresh-token",
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
             config = Config()
 
-            assert config.API_KEY == "test-api-key"
-            assert config.API_SECRET == "test-api-secret"
+            assert config.SESSION_TOKEN == "test-session-token"
+            assert config.REFRESH_TOKEN == "test-refresh-token"
 
     def test_local_importer_enabled_override(self, tmp_path):
         """Test IMPORTER_ENABLED can be overridden in local environment."""
@@ -232,8 +232,8 @@ class TestConfigEdgeCases:
             config = Config()
             assert config.OUTPUT_DIR is None
 
-    def test_missing_api_credentials(self, tmp_path):
-        """Test Config with missing API credentials."""
+    def test_missing_session_tokens(self, tmp_path):
+        """Test Config with missing session tokens."""
         env_vars = {
             "ENVIRONMENT": "local",
             "INPUT_DIR": str(tmp_path),
@@ -242,8 +242,8 @@ class TestConfigEdgeCases:
 
         with patch.dict(os.environ, env_vars, clear=True):
             config = Config()
-            assert config.API_KEY is None
-            assert config.API_SECRET is None
+            assert config.SESSION_TOKEN is None
+            assert config.REFRESH_TOKEN is None
 
     def test_chunk_size_conversion_to_int(self, tmp_path):
         """Test that CHUNK_SIZE_MB is converted to integer."""

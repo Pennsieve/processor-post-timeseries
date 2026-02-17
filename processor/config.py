@@ -15,8 +15,8 @@ class Config:
         # has been converted to use  a different variable to represent the workflow instance ID
         self.WORKFLOW_INSTANCE_ID = os.getenv("INTEGRATION_ID", str(uuid.uuid4()))
 
-        self.API_KEY = os.getenv("PENNSIEVE_API_KEY")
-        self.API_SECRET = os.getenv("PENNSIEVE_API_SECRET")
+        self.SESSION_TOKEN = os.getenv("SESSION_TOKEN")
+        self.REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
         self.API_HOST = os.getenv("PENNSIEVE_API_HOST", "https://api.pennsieve.net")
         self.API_HOST2 = os.getenv("PENNSIEVE_API_HOST2", "https://api2.pennsieve.net")
 

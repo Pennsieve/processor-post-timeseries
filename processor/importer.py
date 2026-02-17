@@ -34,7 +34,7 @@ for import into Pennsieve data ecosystem.
 """
 
 
-def import_timeseries(api_host, api2_host, api_key, api_secret, workflow_instance_id, file_directory):
+def import_timeseries(api_host, api2_host, session_token, refresh_token, workflow_instance_id, file_directory):
     # gather all the time series files from the output directory
     timeseries_data_files = []
     timeseries_channel_files = []
@@ -50,9 +50,8 @@ def import_timeseries(api_host, api2_host, api_key, api_secret, workflow_instanc
         log.info("no time series channels or data")
         return None
 
-    # authentication against the Pennsieve API
-    authorization_client = AuthenticationClient(api_host)
-    session_manager = SessionManager(authorization_client, api_key, api_secret)
+    authentication_client = AuthenticationClient(api_host)
+    session_manager = SessionManager(session_token, authentication_client, refresh_token)
 
     # fetch workflow instance for parameters (dataset_id, package_id, etc.)
     workflow_client = WorkflowClient(api2_host, session_manager)

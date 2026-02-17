@@ -48,8 +48,8 @@ if __name__ == "__main__":
         importer = import_timeseries(
             config.API_HOST,
             config.API_HOST2,
-            config.API_KEY,
-            config.API_SECRET,
+            config.SESSION_TOKEN,
+            config.REFRESH_TOKEN,
             config.WORKFLOW_INSTANCE_ID,
             config.OUTPUT_DIR,
         )
