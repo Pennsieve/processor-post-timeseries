@@ -1,4 +1,6 @@
-from .authentication_client import AuthenticationClient as AuthenticationClient
+from .authentication_client import AuthProvider as AuthProvider
+from .authentication_client import KeySecretAuthProvider as KeySecretAuthProvider
+from .authentication_client import TokenAuthProvider as TokenAuthProvider
 from .base_client import BaseClient as BaseClient
 from .base_client import SessionManager as SessionManager
 from .import_client import ImportClient as ImportClient

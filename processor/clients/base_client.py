@@ -7,25 +7,15 @@ log = logging.getLogger()
 
 # encapsulates a shared API session and token refresh
 class SessionManager:
-    def __init__(self, session_token, authentication_client=None, refresh_token=None):
-        self.__session_token = session_token
-        self.authentication_client = authentication_client
-        self.refresh_token = refresh_token
+    def __init__(self, auth_provider):
+        self._auth_provider = auth_provider
 
     @property
     def session_token(self):
-        return self.__session_token
+        return self._auth_provider.get_session_token()
 
     def refresh_session(self):
-        if self.authentication_client is None:
-            log.warning("session refresh is not available: no authentication client configured")
-            return
-
-        if self.refresh_token:
-            log.info("refreshing session token using refresh token")
-            self.__session_token = self.authentication_client.refresh(self.refresh_token)
-        else:
-            log.warning("session refresh is not available: no refresh token configured")
+        self._auth_provider.refresh()
 
 
 class BaseClient:

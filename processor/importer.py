@@ -10,11 +10,9 @@ from typing import Optional
 import backoff
 import requests
 from clients import (
-    AuthenticationClient,
     ImportClient,
     ImportFile,
     PackagesClient,
-    SessionManager,
     TimeSeriesClient,
     WorkflowClient,
 )
@@ -35,7 +33,7 @@ for import into Pennsieve data ecosystem.
 
 
 def import_timeseries(
-    api_host, api2_host, session_token, refresh_token, workflow_instance_id, file_directory
+    api_host, api2_host, session_manager, workflow_instance_id, file_directory
 ):
     # gather all the time series files from the output directory
     timeseries_data_files = []
@@ -51,9 +49,6 @@ def import_timeseries(
     if len(timeseries_channel_files) == 0 or len(timeseries_data_files) == 0:
         log.info("no time series channels or data")
         return None
-
-    authentication_client = AuthenticationClient(api_host)
-    session_manager = SessionManager(session_token, authentication_client, refresh_token)
 
     # fetch workflow instance for parameters (dataset_id, package_id, etc.)
     workflow_client = WorkflowClient(api2_host, session_manager)

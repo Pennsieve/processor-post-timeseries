@@ -8,57 +8,23 @@ from clients.base_client import BaseClient, SessionManager
 class TestSessionManager:
     """Tests for SessionManager class."""
 
-    def test_initialization(self):
-        """Test basic initialization."""
-        manager = SessionManager(session_token="test-token")
-
-        assert manager.session_token == "test-token"
-
-    def test_session_token_returns_provided_token(self):
-        """Test that session token returns the token provided at init."""
-        manager = SessionManager("my-token")
+    def test_session_token_delegates_to_auth_provider(self):
+        """Test that session_token reads from the auth provider."""
+        mock_provider = Mock()
+        mock_provider.get_session_token.return_value = "my-token"
+        manager = SessionManager(mock_provider)
 
         assert manager.session_token == "my-token"
+        mock_provider.get_session_token.assert_called_once()
 
-    def test_initialization_with_refresh(self):
-        """Test initialization with authentication client and refresh token."""
-        mock_auth_client = Mock()
-        manager = SessionManager("my-token", authentication_client=mock_auth_client, refresh_token="my-refresh-token")
-
-        assert manager.session_token == "my-token"
-        assert manager.authentication_client == mock_auth_client
-        assert manager.refresh_token == "my-refresh-token"
-
-    def test_refresh_session_without_auth_client_does_not_crash(self):
-        """Test that refresh_session logs a warning but does not raise when no auth client configured."""
-        manager = SessionManager("my-token")
-
-        # Should not raise
-        manager.refresh_session()
-
-        # Token remains unchanged
-        assert manager.session_token == "my-token"
-
-    def test_refresh_session_updates_token(self):
-        """Test that refresh_session updates the session token via the authentication client."""
-        mock_auth_client = Mock()
-        mock_auth_client.refresh.return_value = "new-access-token"
-        manager = SessionManager("old-token", authentication_client=mock_auth_client, refresh_token="my-refresh-token")
+    def test_refresh_session_delegates_to_auth_provider(self):
+        """Test that refresh_session calls auth provider's refresh."""
+        mock_provider = Mock()
+        manager = SessionManager(mock_provider)
 
         manager.refresh_session()
 
-        mock_auth_client.refresh.assert_called_once_with("my-refresh-token")
-        assert manager.session_token == "new-access-token"
-
-    def test_refresh_session_no_refresh_token_does_not_crash(self):
-        """Test that refresh_session logs a warning when auth client exists but no refresh token."""
-        mock_auth_client = Mock()
-        manager = SessionManager("my-token", authentication_client=mock_auth_client)
-
-        manager.refresh_session()
-
-        mock_auth_client.refresh.assert_not_called()
-        assert manager.session_token == "my-token"
+        mock_provider.refresh.assert_called_once()
 
 
 class TestBaseClient:
@@ -197,8 +163,10 @@ class TestBaseClientIntegration:
     """Integration tests for BaseClient with SessionManager."""
 
     def test_client_uses_session_token(self):
-        """Test that client methods can access session token."""
-        session_manager = SessionManager("my-access-token")
+        """Test that client methods can access session token via auth provider."""
+        mock_provider = Mock()
+        mock_provider.get_session_token.return_value = "my-access-token"
+        session_manager = SessionManager(mock_provider)
 
         class TestClient(BaseClient):
             @BaseClient.retry_with_refresh
@@ -211,10 +179,12 @@ class TestBaseClientIntegration:
         assert header == "Bearer my-access-token"
 
     def test_retry_refreshes_token_and_succeeds(self):
-        """Test that a 401 triggers a real token refresh and the retry uses the new token."""
-        mock_auth_client = Mock()
-        mock_auth_client.refresh.return_value = "refreshed-token"
-        session_manager = SessionManager("expired-token", mock_auth_client, "my-refresh-token")
+        """Test that a 401 triggers refresh via auth provider and the retry uses the new token."""
+        mock_provider = Mock()
+        # get_session_token is only called on the successful retry (first attempt raises before reading token)
+        mock_provider.get_session_token.return_value = "refreshed-token"
+
+        session_manager = SessionManager(mock_provider)
 
         call_count = [0]
 
@@ -232,5 +202,5 @@ class TestBaseClientIntegration:
         token = client.get_token()
 
         assert token == "refreshed-token"
-        mock_auth_client.refresh.assert_called_once_with("my-refresh-token")
+        mock_provider.refresh.assert_called_once()
         assert call_count[0] == 2
