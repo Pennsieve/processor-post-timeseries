@@ -1,3 +1,5 @@
+import base64
+import json
 from unittest.mock import Mock, patch
 
 import pytest
@@ -7,6 +9,13 @@ from clients.authentication_client import (
     KeySecretAuthProvider,
     TokenAuthProvider,
 )
+
+
+def _make_jwt(payload):
+    """Build a fake JWT with the given payload dict (no signature verification)."""
+    header = base64.urlsafe_b64encode(json.dumps({"alg": "RS256"}).encode()).rstrip(b"=").decode()
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
+    return f"{header}.{body}.fake-signature"
 
 
 class TestCognitoClient:
@@ -22,7 +31,7 @@ class TestCognitoClient:
         responses.add(
             responses.GET,
             "https://api.test.com/authentication/cognito-config",
-            json={"tokenPool": {"appClientId": "test-client-id"}, "region": "us-east-1"},
+            json={"userPool": {"appClientId": "test-client-id"}, "region": "us-east-1"},
             status=200,
         )
 
@@ -46,7 +55,7 @@ class TestCognitoClient:
         responses.add(
             responses.GET,
             "https://api.test.com/authentication/cognito-config",
-            json={"tokenPool": {"appClientId": "my-app-client-id"}, "region": "us-west-2"},
+            json={"userPool": {"appClientId": "my-app-client-id"}, "region": "us-west-2"},
             status=200,
         )
 
@@ -88,7 +97,7 @@ class TestCognitoClient:
         responses.add(
             responses.GET,
             "https://api.test.com/authentication/cognito-config",
-            json={"tokenPool": {"appClientId": "test-client-id"}, "region": "us-east-1"},
+            json={"userPool": {"appClientId": "test-client-id"}, "region": "us-east-1"},
             status=200,
         )
 
@@ -108,7 +117,7 @@ class TestCognitoClient:
         responses.add(
             responses.GET,
             "https://api.test.com/authentication/cognito-config",
-            json={"tokenPool": {"appClientId": "my-app-client-id"}, "region": "us-west-2"},
+            json={"userPool": {"appClientId": "my-app-client-id"}, "region": "us-west-2"},
             status=200,
         )
 
@@ -126,11 +135,84 @@ class TestCognitoClient:
         )
 
     @responses.activate
+    def test_refresh_token_includes_device_key_from_session_token(self):
+        """Test that device_key is extracted from session token and included in refresh params."""
+        responses.add(
+            responses.GET,
+            "https://api.test.com/authentication/cognito-config",
+            json={"userPool": {"appClientId": "client-id"}, "region": "us-east-1"},
+            status=200,
+        )
+
+        mock_cognito_client = Mock()
+        mock_cognito_client.initiate_auth.return_value = {"AuthenticationResult": {"AccessToken": "token"}}
+
+        session_token = _make_jwt({"device_key": "us-east-1_device-abc-123"})
+
+        with patch("clients.authentication_client.boto3.client", return_value=mock_cognito_client):
+            client = CognitoClient("https://api.test.com")
+            client.refresh_token("the-refresh-token", session_token=session_token)
+
+        mock_cognito_client.initiate_auth.assert_called_once_with(
+            AuthFlow="REFRESH_TOKEN_AUTH",
+            AuthParameters={"REFRESH_TOKEN": "the-refresh-token", "DEVICE_KEY": "us-east-1_device-abc-123"},
+            ClientId="client-id",
+        )
+
+    @responses.activate
+    def test_refresh_token_without_device_key_in_session_token(self):
+        """Test that refresh works without device_key when token doesn't contain one."""
+        responses.add(
+            responses.GET,
+            "https://api.test.com/authentication/cognito-config",
+            json={"userPool": {"appClientId": "client-id"}, "region": "us-east-1"},
+            status=200,
+        )
+
+        mock_cognito_client = Mock()
+        mock_cognito_client.initiate_auth.return_value = {"AuthenticationResult": {"AccessToken": "token"}}
+
+        session_token = _make_jwt({"sub": "user-123"})
+
+        with patch("clients.authentication_client.boto3.client", return_value=mock_cognito_client):
+            client = CognitoClient("https://api.test.com")
+            client.refresh_token("the-refresh-token", session_token=session_token)
+
+        mock_cognito_client.initiate_auth.assert_called_once_with(
+            AuthFlow="REFRESH_TOKEN_AUTH",
+            AuthParameters={"REFRESH_TOKEN": "the-refresh-token"},
+            ClientId="client-id",
+        )
+
+    @responses.activate
+    def test_refresh_token_without_session_token(self):
+        """Test that refresh works without session_token (no device_key extraction attempted)."""
+        responses.add(
+            responses.GET,
+            "https://api.test.com/authentication/cognito-config",
+            json={"userPool": {"appClientId": "client-id"}, "region": "us-east-1"},
+            status=200,
+        )
+
+        mock_cognito_client = Mock()
+        mock_cognito_client.initiate_auth.return_value = {"AuthenticationResult": {"AccessToken": "token"}}
+
+        with patch("clients.authentication_client.boto3.client", return_value=mock_cognito_client):
+            client = CognitoClient("https://api.test.com")
+            client.refresh_token("the-refresh-token")
+
+        mock_cognito_client.initiate_auth.assert_called_once_with(
+            AuthFlow="REFRESH_TOKEN_AUTH",
+            AuthParameters={"REFRESH_TOKEN": "the-refresh-token"},
+            ClientId="client-id",
+        )
+
+    @responses.activate
     def test_cognito_config_cached_across_calls(self):
         responses.add(
             responses.GET,
             "https://api.test.com/authentication/cognito-config",
-            json={"tokenPool": {"appClientId": "client-id"}, "region": "us-east-1"},
+            json={"userPool": {"appClientId": "client-id"}, "region": "us-east-1"},
             status=200,
         )
 
@@ -170,7 +252,7 @@ class TestTokenAuthProvider:
 
         assert result == "new-access-token"
         assert provider.get_session_token() == "new-access-token"
-        mock_cognito.refresh_token.assert_called_once_with("my-refresh-token")
+        mock_cognito.refresh_token.assert_called_once_with("my-refresh-token", "old-token")
 
     def test_refresh_raises_without_refresh_token(self):
         provider = TokenAuthProvider.__new__(TokenAuthProvider)
@@ -190,7 +272,7 @@ class TestKeySecretAuthProvider:
         responses.add(
             responses.GET,
             "https://api.test.com/authentication/cognito-config",
-            json={"tokenPool": {"appClientId": "client-id"}, "region": "us-east-1"},
+            json={"userPool": {"appClientId": "client-id"}, "region": "us-east-1"},
             status=200,
         )
 
@@ -222,7 +304,7 @@ class TestKeySecretAuthProvider:
 
         assert result == "refreshed-token"
         assert provider.get_session_token() == "refreshed-token"
-        mock_cognito.refresh_token.assert_called_once_with("my-refresh-token")
+        mock_cognito.refresh_token.assert_called_once_with("my-refresh-token", "old-token")
 
     def test_refresh_re_authenticates_when_no_refresh_token(self):
         mock_cognito = Mock()

@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -43,7 +44,7 @@ class CognitoClient:
         data = json.loads(response.content)
 
         self._cognito_config = {
-            "app_client_id": data["tokenPool"]["appClientId"],
+            "app_client_id": data["userPool"]["appClientId"],
             "region": data["region"],
         }
         return self._cognito_config
@@ -71,10 +72,35 @@ class CognitoClient:
         auth_result = login_response["AuthenticationResult"]
         return auth_result["AccessToken"], auth_result["RefreshToken"]
 
-    def refresh_token(self, refresh_token):
+    @staticmethod
+    def _decode_token(token):
+        """Decode a JWT payload without verification (for extracting claims like device_key)."""
+        payload = token.split(".")[1]
+        # JWT base64url encoding may lack padding
+        padding = 4 - len(payload) % 4
+        if padding != 4:
+            payload += "=" * padding
+        return json.loads(base64.urlsafe_b64decode(payload))
+
+    def refresh_token(self, refresh_token, session_token=None):
         """Use a refresh token to obtain a new access token via Cognito REFRESH_TOKEN_AUTH."""
         config = self._get_cognito_config()
         idp_client = self._get_idp_client()
+
+        auth_parameters = {"REFRESH_TOKEN": refresh_token}
+
+        device_key = None
+        if session_token:
+            try:
+                decoded = self._decode_token(session_token)
+                device_key = decoded.get("device_key")
+                if device_key:
+                    log.info(f"extracted device_key from session token: {device_key}")
+            except Exception as e:
+                log.warning(f"failed to extract device_key from session token: {e}")
+
+        if device_key:
+            auth_parameters["DEVICE_KEY"] = device_key
 
         response = idp_client.initiate_auth(
             AuthFlow="REFRESH_TOKEN_AUTH",
@@ -100,7 +126,7 @@ class TokenAuthProvider(AuthProvider):
         if not self._refresh_token:
             raise RuntimeError("cannot refresh session: no refresh token available")
         log.info("refreshing session token using refresh token")
-        self._session_token = self._cognito.refresh_token(self._refresh_token)
+        self._session_token = self._cognito.refresh_token(self._refresh_token, self._session_token)
         return self._session_token
 
 
@@ -125,7 +151,7 @@ class KeySecretAuthProvider(AuthProvider):
     def refresh(self) -> str:
         if self._refresh_token:
             log.info("refreshing session token using refresh token")
-            self._session_token = self._cognito.refresh_token(self._refresh_token)
+            self._session_token = self._cognito.refresh_token(self._refresh_token, self._session_token)
         else:
             log.info("no refresh token, re-authenticating with API key/secret")
             self._session_token, self._refresh_token = self._cognito.authenticate(
