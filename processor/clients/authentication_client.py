@@ -104,7 +104,7 @@ class CognitoClient:
 
         response = idp_client.initiate_auth(
             AuthFlow="REFRESH_TOKEN_AUTH",
-            AuthParameters={"REFRESH_TOKEN": refresh_token},
+            AuthParameters=auth_parameters,
             ClientId=config["app_client_id"],
         )
 
