@@ -49,7 +49,7 @@ class TestWorkflowClientGetWorkflowInstance:
         """Test successful workflow instance retrieval."""
         responses.add(
             responses.GET,
-            "https://api.test.com/workflows/instances/wf-instance-123",
+            "https://api.test.com/compute/workflows/runs/wf-instance-123",
             json={"uuid": "wf-instance-123", "datasetId": "dataset-456", "packageIds": ["pkg-1", "pkg-2", "pkg-3"]},
             status=200,
         )
@@ -67,7 +67,7 @@ class TestWorkflowClientGetWorkflowInstance:
         """Test that authorization header is included."""
         responses.add(
             responses.GET,
-            "https://api.test.com/workflows/instances/wf-123",
+            "https://api.test.com/compute/workflows/runs/wf-123",
             json={"uuid": "wf-123", "datasetId": "ds-1", "packageIds": []},
             status=200,
         )
@@ -82,7 +82,7 @@ class TestWorkflowClientGetWorkflowInstance:
     def test_get_workflow_instance_raises_on_http_error(self, mock_session_manager):
         """Test that HTTP errors are raised."""
         responses.add(
-            responses.GET, "https://api.test.com/workflows/instances/wf-123", json={"error": "Not found"}, status=404
+            responses.GET, "https://api.test.com/compute/workflows/runs/wf-123", json={"error": "Not found"}, status=404
         )
 
         client = WorkflowClient("https://api.test.com", mock_session_manager)
@@ -93,7 +93,7 @@ class TestWorkflowClientGetWorkflowInstance:
     @responses.activate
     def test_get_workflow_instance_raises_on_invalid_json(self, mock_session_manager):
         """Test that invalid JSON raises error."""
-        responses.add(responses.GET, "https://api.test.com/workflows/instances/wf-123", body="not json", status=200)
+        responses.add(responses.GET, "https://api.test.com/compute/workflows/runs/wf-123", body="not json", status=200)
 
         client = WorkflowClient("https://api.test.com", mock_session_manager)
 
@@ -105,7 +105,7 @@ class TestWorkflowClientGetWorkflowInstance:
         """Test workflow instance with single package ID."""
         responses.add(
             responses.GET,
-            "https://api.test.com/workflows/instances/wf-123",
+            "https://api.test.com/compute/workflows/runs/wf-123",
             json={"uuid": "wf-123", "datasetId": "ds-1", "packageIds": ["single-pkg"]},
             status=200,
         )
@@ -125,12 +125,12 @@ class TestWorkflowClientRetryBehavior:
         """Test that get_workflow_instance retries after 401."""
         # First call returns 401
         responses.add(
-            responses.GET, "https://api.test.com/workflows/instances/wf-123", json={"error": "Unauthorized"}, status=401
+            responses.GET, "https://api.test.com/compute/workflows/runs/wf-123", json={"error": "Unauthorized"}, status=401
         )
         # Second call succeeds
         responses.add(
             responses.GET,
-            "https://api.test.com/workflows/instances/wf-123",
+            "https://api.test.com/compute/workflows/runs/wf-123",
             json={"uuid": "wf-123", "datasetId": "ds-1", "packageIds": []},
             status=200,
         )
@@ -146,12 +146,12 @@ class TestWorkflowClientRetryBehavior:
         """Test that get_workflow_instance retries after 403."""
         # First call returns 403
         responses.add(
-            responses.GET, "https://api.test.com/workflows/instances/wf-123", json={"error": "Forbidden"}, status=403
+            responses.GET, "https://api.test.com/compute/workflows/runs/wf-123", json={"error": "Forbidden"}, status=403
         )
         # Second call succeeds
         responses.add(
             responses.GET,
-            "https://api.test.com/workflows/instances/wf-123",
+            "https://api.test.com/compute/workflows/runs/wf-123",
             json={"uuid": "wf-123", "datasetId": "ds-1", "packageIds": []},
             status=200,
         )

@@ -146,8 +146,8 @@ The processor generates two types of files per channel:
 | `OUTPUT_DIR` | Directory for output files | - |
 | `CHUNK_SIZE_MB` | Size of each data chunk in MB | `1` |
 | `IMPORTER_ENABLED` | Enable Pennsieve upload | `false` |
-| `PENNSIEVE_API_KEY` | Pennsieve API key | - |
-| `PENNSIEVE_API_SECRET` | Pennsieve API secret | - |
+| `SESSION_TOKEN` | Pennsieve session token | - |
+| `REFRESH_TOKEN` | Pennsieve refresh token | - |
 | `PENNSIEVE_API_HOST` | Pennsieve API endpoint | `https://api.pennsieve.net` |
 | `PENNSIEVE_API_HOST2` | Pennsieve API2 endpoint | `https://api2.pennsieve.net` |
 | `INTEGRATION_ID` | Workflow instance ID | - |

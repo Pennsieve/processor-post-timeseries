@@ -5,24 +5,17 @@ import requests
 log = logging.getLogger()
 
 
-# encapsulates a shared API session and re-authentication functionality
+# encapsulates a shared API session and token refresh
 class SessionManager:
-    def __init__(self, authentication_client, api_key, api_secret):
-        self.authentication_client = authentication_client
-        self.api_key = api_key
-        self.api_secret = api_secret
-
-        self.__session_token = None
+    def __init__(self, auth_provider):
+        self._auth_provider = auth_provider
 
     @property
     def session_token(self):
-        if self.__session_token is None:
-            self.refresh_session()
-
-        return self.__session_token
+        return self._auth_provider.get_session_token()
 
     def refresh_session(self):
-        self.__session_token = self.authentication_client.authenticate(self.api_key, self.api_secret)
+        self._auth_provider.refresh()
 
 
 class BaseClient:

@@ -8,64 +8,23 @@ from clients.base_client import BaseClient, SessionManager
 class TestSessionManager:
     """Tests for SessionManager class."""
 
-    def test_initialization(self, mock_authentication_client):
-        """Test basic initialization."""
-        manager = SessionManager(
-            authentication_client=mock_authentication_client, api_key="test-api-key", api_secret="test-api-secret"
-        )
+    def test_session_token_delegates_to_auth_provider(self):
+        """Test that session_token reads from the auth provider."""
+        mock_provider = Mock()
+        mock_provider.get_session_token.return_value = "my-token"
+        manager = SessionManager(mock_provider)
 
-        assert manager.authentication_client == mock_authentication_client
-        assert manager.api_key == "test-api-key"
-        assert manager.api_secret == "test-api-secret"
+        assert manager.session_token == "my-token"
+        mock_provider.get_session_token.assert_called_once()
 
-    def test_session_token_lazy_initialization(self, mock_authentication_client):
-        """Test that session token is lazily initialized on first access."""
-        manager = SessionManager(mock_authentication_client, "key", "secret")
-
-        # Token should not be fetched yet
-        mock_authentication_client.authenticate.assert_not_called()
-
-        # Access token
-        token = manager.session_token
-
-        # Now authenticate should have been called
-        mock_authentication_client.authenticate.assert_called_once_with("key", "secret")
-        assert token == "mock-access-token"
-
-    def test_session_token_cached(self, mock_authentication_client):
-        """Test that session token is cached after first access."""
-        manager = SessionManager(mock_authentication_client, "key", "secret")
-
-        # Access token twice
-        token1 = manager.session_token
-        token2 = manager.session_token
-
-        # Authenticate should only be called once
-        mock_authentication_client.authenticate.assert_called_once()
-        assert token1 == token2
-
-    def test_refresh_session(self, mock_authentication_client):
-        """Test manual session refresh."""
-        manager = SessionManager(mock_authentication_client, "key", "secret")
-
-        # Access token to initialize
-        _ = manager.session_token
-        assert mock_authentication_client.authenticate.call_count == 1
-
-        # Refresh session
-        mock_authentication_client.authenticate.return_value = "new-token"
-        manager.refresh_session()
-
-        assert mock_authentication_client.authenticate.call_count == 2
-        assert manager.session_token == "new-token"
-
-    def test_refresh_session_without_prior_access(self, mock_authentication_client):
-        """Test refresh_session can be called without prior token access."""
-        manager = SessionManager(mock_authentication_client, "key", "secret")
+    def test_refresh_session_delegates_to_auth_provider(self):
+        """Test that refresh_session calls auth provider's refresh."""
+        mock_provider = Mock()
+        manager = SessionManager(mock_provider)
 
         manager.refresh_session()
 
-        mock_authentication_client.authenticate.assert_called_once_with("key", "secret")
+        mock_provider.refresh.assert_called_once()
 
 
 class TestBaseClient:
@@ -203,9 +162,11 @@ class TestBaseClient:
 class TestBaseClientIntegration:
     """Integration tests for BaseClient with SessionManager."""
 
-    def test_client_uses_session_token(self, mock_authentication_client):
-        """Test that client methods can access session token."""
-        session_manager = SessionManager(mock_authentication_client, "key", "secret")
+    def test_client_uses_session_token(self):
+        """Test that client methods can access session token via auth provider."""
+        mock_provider = Mock()
+        mock_provider.get_session_token.return_value = "my-access-token"
+        session_manager = SessionManager(mock_provider)
 
         class TestClient(BaseClient):
             @BaseClient.retry_with_refresh
@@ -215,11 +176,16 @@ class TestBaseClientIntegration:
         client = TestClient(session_manager)
         header = client.get_auth_header()
 
-        assert header == "Bearer mock-access-token"
+        assert header == "Bearer my-access-token"
 
-    def test_refresh_updates_token_for_next_call(self, mock_authentication_client):
-        """Test that after refresh, subsequent calls use new token."""
-        session_manager = SessionManager(mock_authentication_client, "key", "secret")
+    def test_retry_refreshes_token_and_succeeds(self):
+        """Test that a 401 triggers refresh via auth provider and the retry uses the new token."""
+        mock_provider = Mock()
+        # get_session_token is only called on the successful retry (first attempt raises before reading token)
+        mock_provider.get_session_token.return_value = "refreshed-token"
+
+        session_manager = SessionManager(mock_provider)
+
         call_count = [0]
 
         class TestClient(BaseClient):
@@ -232,11 +198,9 @@ class TestBaseClientIntegration:
                     raise requests.exceptions.HTTPError(response=response)
                 return self.session_manager.session_token
 
-        # First call returns 'mock-access-token', refresh returns 'refreshed-token'
-        mock_authentication_client.authenticate.side_effect = ["mock-access-token", "refreshed-token"]
-
         client = TestClient(session_manager)
-        client.get_token()
+        token = client.get_token()
 
-        # The refresh_session was called, showing the retry mechanism worked
-        assert call_count[0] == 2  # Verifies retry happened
+        assert token == "refreshed-token"
+        mock_provider.refresh.assert_called_once()
+        assert call_count[0] == 2

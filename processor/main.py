@@ -45,11 +45,22 @@ if __name__ == "__main__":
     # note: this will be moved to a separated post-processor once the analysis pipeline is more
     # easily able to handle > 3 processors
     if config.IMPORTER_ENABLED:
-        importer = import_timeseries(
+        from clients.authentication_client import KeySecretAuthProvider, TokenAuthProvider
+        from clients.base_client import SessionManager
+
+        if config.SESSION_TOKEN:
+            auth_provider = TokenAuthProvider(config.API_HOST, config.SESSION_TOKEN, config.REFRESH_TOKEN)
+        elif config.API_KEY and config.API_SECRET:
+            auth_provider = KeySecretAuthProvider(config.API_HOST, config.API_KEY, config.API_SECRET)
+        else:
+            raise RuntimeError("no authentication credentials provided: set SESSION_TOKEN or API_KEY/API_SECRET")
+
+        session_manager = SessionManager(auth_provider)
+
+        import_timeseries(
             config.API_HOST,
             config.API_HOST2,
-            config.API_KEY,
-            config.API_SECRET,
+            session_manager,
             config.WORKFLOW_INSTANCE_ID,
             config.OUTPUT_DIR,
         )

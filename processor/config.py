@@ -1,5 +1,8 @@
+import logging
 import os
 import uuid
+
+log = logging.getLogger()
 
 
 class Config:
@@ -15,6 +18,8 @@ class Config:
         # has been converted to use  a different variable to represent the workflow instance ID
         self.WORKFLOW_INSTANCE_ID = os.getenv("INTEGRATION_ID", str(uuid.uuid4()))
 
+        self.SESSION_TOKEN = os.getenv("SESSION_TOKEN")
+        self.REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
         self.API_KEY = os.getenv("PENNSIEVE_API_KEY")
         self.API_SECRET = os.getenv("PENNSIEVE_API_SECRET")
         self.API_HOST = os.getenv("PENNSIEVE_API_HOST", "https://api.pennsieve.net")
