@@ -34,10 +34,14 @@ class WorkflowClient(BaseClient):
             response.raise_for_status()
             data = response.json()
 
+            package_ids = []
+            for source in data.get("dataSources", {}).values():
+                package_ids.extend(source.get("packageIds", []))
+
             workflow_instance = WorkflowInstance(
                 id=data["uuid"],
                 dataset_id=data["datasetId"],
-                package_ids=data["packageIds"],
+                package_ids=package_ids,
             )
 
             return workflow_instance
