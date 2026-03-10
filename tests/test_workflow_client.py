@@ -50,7 +50,7 @@ class TestWorkflowClientGetWorkflowInstance:
         responses.add(
             responses.GET,
             "https://api.test.com/compute/workflows/runs/wf-instance-123",
-            json={"uuid": "wf-instance-123", "datasetId": "dataset-456", "packageIds": ["pkg-1", "pkg-2", "pkg-3"]},
+            json={"uuid": "wf-instance-123", "datasetId": "dataset-456", "dataSources": {"source-1": {"packageIds": ["pkg-1", "pkg-2", "pkg-3"]}}},
             status=200,
         )
 
@@ -68,7 +68,7 @@ class TestWorkflowClientGetWorkflowInstance:
         responses.add(
             responses.GET,
             "https://api.test.com/compute/workflows/runs/wf-123",
-            json={"uuid": "wf-123", "datasetId": "ds-1", "packageIds": []},
+            json={"uuid": "wf-123", "datasetId": "ds-1", "dataSources": {}},
             status=200,
         )
 
@@ -106,7 +106,7 @@ class TestWorkflowClientGetWorkflowInstance:
         responses.add(
             responses.GET,
             "https://api.test.com/compute/workflows/runs/wf-123",
-            json={"uuid": "wf-123", "datasetId": "ds-1", "packageIds": ["single-pkg"]},
+            json={"uuid": "wf-123", "datasetId": "ds-1", "dataSources": {"source-1": {"packageIds": ["single-pkg"]}}},
             status=200,
         )
 
@@ -131,7 +131,7 @@ class TestWorkflowClientRetryBehavior:
         responses.add(
             responses.GET,
             "https://api.test.com/compute/workflows/runs/wf-123",
-            json={"uuid": "wf-123", "datasetId": "ds-1", "packageIds": []},
+            json={"uuid": "wf-123", "datasetId": "ds-1", "dataSources": {}},
             status=200,
         )
 
@@ -152,7 +152,7 @@ class TestWorkflowClientRetryBehavior:
         responses.add(
             responses.GET,
             "https://api.test.com/compute/workflows/runs/wf-123",
-            json={"uuid": "wf-123", "datasetId": "ds-1", "packageIds": []},
+            json={"uuid": "wf-123", "datasetId": "ds-1", "dataSources": {}},
             status=200,
         )
 
