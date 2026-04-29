@@ -14,6 +14,7 @@ class TimeSeriesChannel:
         last_annotation=0,
         properties=None,
         id=None,
+        viewer_asset_id=None,
     ):
         if properties is None:
             properties = []
@@ -33,6 +34,7 @@ class TimeSeriesChannel:
         self.group = group.strip()
         self.last_annotation = last_annotation
         self.properties = properties
+        self.viewer_asset_id = viewer_asset_id
 
     def as_dict(self):
         resp = {
@@ -50,6 +52,9 @@ class TimeSeriesChannel:
         if self.id is not None:
             resp["id"] = self.id
 
+        if self.viewer_asset_id is not None:
+            resp["viewerAssetId"] = str(self.viewer_asset_id)
+
         return resp
 
     @staticmethod
@@ -65,6 +70,7 @@ class TimeSeriesChannel:
             last_annotation=int(channel.get("lastAnnotation", 0)),
             properties=channel.get("properties", properties),
             id=channel.get("id"),
+            viewer_asset_id=channel.get("viewerAssetId"),
             index=-1,
         )
 

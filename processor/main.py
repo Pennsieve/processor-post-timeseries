@@ -57,10 +57,4 @@ if __name__ == "__main__":
 
         session_manager = SessionManager(auth_provider)
 
-        import_timeseries(
-            config.API_HOST,
-            config.API_HOST2,
-            session_manager,
-            config.WORKFLOW_INSTANCE_ID,
-            config.OUTPUT_DIR,
-        )
+        import_timeseries(config, session_manager)

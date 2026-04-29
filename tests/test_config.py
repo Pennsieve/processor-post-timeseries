@@ -258,3 +258,53 @@ class TestConfigEdgeCases:
             config = Config()
             assert config.CHUNK_SIZE_MB == 10
             assert isinstance(config.CHUNK_SIZE_MB, int)
+
+
+class TestConfigAssetFlow:
+    """Tests for the viewer-asset-flow config attributes."""
+
+    def test_asset_name_default(self, tmp_path):
+        """ASSET_NAME defaults to 'timeseries-asset' when not set."""
+        env_vars = {
+            "ENVIRONMENT": "local",
+            "INPUT_DIR": str(tmp_path),
+            "OUTPUT_DIR": str(tmp_path),
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = Config()
+            assert config.ASSET_NAME == "timeseries-asset"
+
+    def test_asset_name_override(self, tmp_path):
+        """ASSET_NAME picks up the env var when set."""
+        env_vars = {
+            "ENVIRONMENT": "local",
+            "INPUT_DIR": str(tmp_path),
+            "OUTPUT_DIR": str(tmp_path),
+            "ASSET_NAME": "mef-asset",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = Config()
+            assert config.ASSET_NAME == "mef-asset"
+
+    def test_legacy_import_flow_default_false(self, tmp_path):
+        """LEGACY_IMPORT_FLOW defaults to false (use new viewer-asset path)."""
+        env_vars = {
+            "ENVIRONMENT": "local",
+            "INPUT_DIR": str(tmp_path),
+            "OUTPUT_DIR": str(tmp_path),
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = Config()
+            assert config.LEGACY_IMPORT_FLOW is False
+
+    def test_legacy_import_flow_opt_in(self, tmp_path):
+        """LEGACY_IMPORT_FLOW=true switches back to the import-manifest path."""
+        env_vars = {
+            "ENVIRONMENT": "local",
+            "INPUT_DIR": str(tmp_path),
+            "OUTPUT_DIR": str(tmp_path),
+            "LEGACY_IMPORT_FLOW": "true",
+        }
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = Config()
+            assert config.LEGACY_IMPORT_FLOW is True

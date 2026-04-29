@@ -5,6 +5,15 @@ import requests
 log = logging.getLogger()
 
 
+def _is_client_error(exc: requests.HTTPError) -> bool:
+    """Tells the backoff library not to retry on 4xx responses.
+
+    4xx means the request itself is wrong; retrying won't help. 5xx
+    (and connection-level errors) are likely transient — retry those.
+    """
+    return exc.response is not None and 400 <= exc.response.status_code < 500
+
+
 # encapsulates a shared API session and token refresh
 class SessionManager:
     def __init__(self, auth_provider):

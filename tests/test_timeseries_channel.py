@@ -112,6 +112,26 @@ class TestTimeSeriesChannelAsDict:
         result = channel.as_dict()
         assert result["properties"] == [{"key1": "value1"}, {"key2": "value2"}]
 
+    def test_as_dict_omits_viewer_asset_id_when_none(self):
+        """viewerAssetId is excluded from the body when not set."""
+        channel = TimeSeriesChannel(index=0, name="Test", rate=1000.0, start=0, end=1000)
+        result = channel.as_dict()
+        assert "viewerAssetId" not in result
+
+    def test_as_dict_includes_viewer_asset_id_when_set(self):
+        """viewerAssetId is serialized as a string when set."""
+        asset_id = "00000000-0000-0000-0000-0000000000a1"
+        channel = TimeSeriesChannel(
+            index=0,
+            name="Test",
+            rate=1000.0,
+            start=0,
+            end=1000,
+            viewer_asset_id=asset_id,
+        )
+        result = channel.as_dict()
+        assert result["viewerAssetId"] == asset_id
+
 
 class TestTimeSeriesChannelFromDict:
     """Tests for TimeSeriesChannel.from_dict() static method."""

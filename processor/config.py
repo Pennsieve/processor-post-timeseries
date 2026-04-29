@@ -27,6 +27,17 @@ class Config:
 
         self.IMPORTER_ENABLED = getboolenv("IMPORTER_ENABLED", self.ENVIRONMENT != "local")
 
+        # Per-converter pipeline name embedded in the viewer_asset row,
+        # e.g. "mef-asset", "edf-asset". Each deployment of post-timeseries
+        # sets its own value.
+        self.ASSET_NAME = os.getenv("ASSET_NAME", "timeseries-asset")
+
+        # When true, fall back to the pre-viewer-asset flow that uploads
+        # via the Pennsieve import-manifest API. Default false → new flow
+        # that creates a viewer_asset, uploads via packages-service STS
+        # creds, and registers ranges via timeseries-service.
+        self.LEGACY_IMPORT_FLOW = getboolenv("LEGACY_IMPORT_FLOW", False)
+
 
 def getboolenv(key, default=False):
     return os.getenv(key, str(default)).lower() in ("true", "1")
