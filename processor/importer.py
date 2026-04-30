@@ -154,6 +154,11 @@ def import_timeseries_via_assets(
             existing_channels,
             viewer_asset_id=asset.id,
         )
+        if not channels_by_index:
+            raise RuntimeError(
+                "no channels were resolved from staged metadata files; "
+                "refusing to mark asset active with empty data"
+            )
 
         # Rename data files to use channel node ids in their basenames
         # (matching the legacy naming convention so timeseries.ranges.location
@@ -161,6 +166,11 @@ def import_timeseries_via_assets(
         renamed_data_files = _rename_data_files_to_node_ids(
             timeseries_data_files, channels_by_index
         )
+        if not renamed_data_files:
+            raise RuntimeError(
+                "no chunk files were resolved from the output directory; "
+                "refusing to mark asset active with empty data"
+            )
 
         # Upload to S3 using the STS creds returned by create_asset.
         uploader = AssetUploader(upload_credentials)
@@ -324,8 +334,10 @@ def _create_or_resolve_channels(
     for file_path in timeseries_channel_files:
         match = _CHANNEL_INDEX_PATTERN.search(os.path.basename(file_path))
         if match is None:
-            log.warning("skipping unparseable channel metadata file: %s", file_path)
-            continue
+            raise RuntimeError(
+                f"channel metadata filename does not match expected "
+                f"channel-NNNNN pattern: {file_path}"
+            )
         channel_index = match.group(1)
 
         with open(file_path, "r") as f:
@@ -381,17 +393,18 @@ def _rename_data_files_to_node_ids(
     for file_path in timeseries_data_files:
         match = _CHANNEL_INDEX_PATTERN.search(os.path.basename(file_path))
         if match is None:
-            log.warning("skipping unparseable chunk file: %s", file_path)
-            continue
+            raise RuntimeError(
+                f"chunk filename does not match expected channel-NNNNN_*_*.bin.gz "
+                f"pattern: {file_path}"
+            )
         channel_index = match.group(1)
         channel = channels_by_index.get(channel_index)
         if channel is None:
-            log.warning(
-                "no channel resolved for index %s; skipping %s",
-                channel_index,
-                file_path,
+            raise RuntimeError(
+                f"chunk file {file_path} references channel index "
+                f"{channel_index!r} for which no channel metadata was resolved; "
+                "every chunk must map to a known channel"
             )
-            continue
 
         new_basename = re.sub(_CHANNEL_INDEX_PATTERN, channel.id, os.path.basename(file_path))
         new_path = os.path.join(os.path.dirname(file_path), new_basename)

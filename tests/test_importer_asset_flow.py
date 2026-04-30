@@ -534,6 +534,194 @@ class TestMultiPackageIdempotency:
             rsps.reset()
 
 
+class TestFailFastOnMalformedFiles:
+    """Unparseable channel/chunk filenames or chunks with no matching
+    channel must abort the ingest after asset creation, triggering the
+    cleanup DELETE so the asset never reaches 'active' with partial data.
+    """
+
+    def _malformed_metadata_dir(self, tmp_path):
+        """Output dir with one chunk file (will fail filename parse)."""
+        output = tmp_path / "output"
+        output.mkdir()
+        # Metadata filename does NOT contain channel-NNNNN
+        meta = {
+            "name": "ch-0", "start": 0, "end": 1000, "unit": "uV",
+            "rate": 1000.0, "type": "CONTINUOUS", "group": "default",
+            "lastAnnotation": 0, "properties": [],
+        }
+        (output / "weird-name.metadata.json").write_text(json.dumps(meta))
+        chunk = output / "channel-00000_0_1000.bin.gz"
+        with gzip.open(chunk, "wb") as f:
+            f.write(b"\x00" * 8)
+        return str(output)
+
+    def _malformed_chunk_dir(self, tmp_path):
+        """Output dir with chunk filename that doesn't match the pattern."""
+        output = tmp_path / "output"
+        output.mkdir()
+        meta = {
+            "name": "ch-0", "start": 0, "end": 1000, "unit": "uV",
+            "rate": 1000.0, "type": "CONTINUOUS", "group": "default",
+            "lastAnnotation": 0, "properties": [],
+        }
+        (output / "channel-00000.metadata.json").write_text(json.dumps(meta))
+        chunk = output / "wrong-prefix_0_1000.bin.gz"
+        with gzip.open(chunk, "wb") as f:
+            f.write(b"\x00" * 8)
+        return str(output)
+
+    def _orphan_chunk_dir(self, tmp_path):
+        """Chunk references channel-00001 but only channel-00000 metadata exists."""
+        output = tmp_path / "output"
+        output.mkdir()
+        meta = {
+            "name": "ch-0", "start": 0, "end": 1000, "unit": "uV",
+            "rate": 1000.0, "type": "CONTINUOUS", "group": "default",
+            "lastAnnotation": 0, "properties": [],
+        }
+        (output / "channel-00000.metadata.json").write_text(json.dumps(meta))
+        # Only metadata for index 0; chunk references index 1
+        chunk = output / "channel-00001_0_1000.bin.gz"
+        with gzip.open(chunk, "wb") as f:
+            f.write(b"\x00" * 8)
+        return str(output)
+
+    def _wire_through_asset_create(self, rsps):
+        """Register everything up to and including asset creation. Tests
+        below verify the next step raises and triggers cleanup DELETE."""
+        rsps.add(
+            responses.GET,
+            f"{API_HOST2}/compute/workflows/runs/{WORKFLOW_INSTANCE_ID}",
+            json=_workflow_response(),
+            status=200,
+        )
+        rsps.add(
+            responses.PUT,
+            f"{API_HOST}/packages/{PACKAGE_NODE_ID}",
+            json={},
+            status=200,
+        )
+        rsps.add(
+            responses.GET,
+            f"{API_HOST2}/packages/assets",
+            json={"assets": []},
+            status=200,
+        )
+        rsps.add(
+            responses.POST,
+            f"{API_HOST2}/packages/assets",
+            json=_asset_create_response(),
+            status=201,
+        )
+        rsps.add(
+            responses.GET,
+            f"{API_HOST}/timeseries/{PACKAGE_NODE_ID}/channels",
+            json=[],
+            status=200,
+        )
+        rsps.add(
+            responses.POST,
+            f"{API_HOST}/timeseries/{PACKAGE_NODE_ID}/channels",
+            json=_channel_create_response(),
+            status=201,
+        )
+        # Asset cleanup DELETE on any failure
+        rsps.add(
+            responses.DELETE,
+            f"{API_HOST2}/packages/assets/{ASSET_ID}",
+            status=204,
+        )
+
+    @patch("asset_uploader.boto3.client")
+    def test_unparseable_metadata_filename_raises_and_cleans_up(
+        self, mock_boto, session_manager, tmp_path
+    ):
+        rsps = responses.RequestsMock(assert_all_requests_are_fired=False)
+        rsps.start()
+        try:
+            self._wire_through_asset_create(rsps)
+
+            with pytest.raises(RuntimeError, match="metadata filename"):
+                import_timeseries_via_assets(
+                    api_host=API_HOST,
+                    api2_host=API_HOST2,
+                    session_manager=session_manager,
+                    workflow_instance_id=WORKFLOW_INSTANCE_ID,
+                    file_directory=self._malformed_metadata_dir(tmp_path),
+                    asset_name="mef-asset",
+                    asset_type="timeseries",
+                )
+
+            # No upload happened; cleanup DELETE fired
+            mock_boto.assert_not_called()
+            assert any(
+                c.request.method == "DELETE" and ASSET_ID in c.request.url
+                for c in rsps.calls
+            )
+        finally:
+            rsps.stop()
+            rsps.reset()
+
+    @patch("asset_uploader.boto3.client")
+    def test_unparseable_chunk_filename_raises_and_cleans_up(
+        self, mock_boto, session_manager, tmp_path
+    ):
+        rsps = responses.RequestsMock(assert_all_requests_are_fired=False)
+        rsps.start()
+        try:
+            self._wire_through_asset_create(rsps)
+
+            with pytest.raises(RuntimeError, match="chunk filename"):
+                import_timeseries_via_assets(
+                    api_host=API_HOST,
+                    api2_host=API_HOST2,
+                    session_manager=session_manager,
+                    workflow_instance_id=WORKFLOW_INSTANCE_ID,
+                    file_directory=self._malformed_chunk_dir(tmp_path),
+                    asset_name="mef-asset",
+                    asset_type="timeseries",
+                )
+
+            mock_boto.assert_not_called()
+            assert any(
+                c.request.method == "DELETE" and ASSET_ID in c.request.url
+                for c in rsps.calls
+            )
+        finally:
+            rsps.stop()
+            rsps.reset()
+
+    @patch("asset_uploader.boto3.client")
+    def test_chunk_with_no_resolved_channel_raises_and_cleans_up(
+        self, mock_boto, session_manager, tmp_path
+    ):
+        rsps = responses.RequestsMock(assert_all_requests_are_fired=False)
+        rsps.start()
+        try:
+            self._wire_through_asset_create(rsps)
+
+            with pytest.raises(RuntimeError, match="no channel metadata was resolved"):
+                import_timeseries_via_assets(
+                    api_host=API_HOST,
+                    api2_host=API_HOST2,
+                    session_manager=session_manager,
+                    workflow_instance_id=WORKFLOW_INSTANCE_ID,
+                    file_directory=self._orphan_chunk_dir(tmp_path),
+                    asset_name="mef-asset",
+                    asset_type="timeseries",
+                )
+
+            mock_boto.assert_not_called()
+            assert any(
+                c.request.method == "DELETE" and ASSET_ID in c.request.url
+                for c in rsps.calls
+            )
+        finally:
+            rsps.stop()
+            rsps.reset()
+
+
 class TestEmptyDirectory:
     def test_no_files_returns_none_without_calling_services(
         self, session_manager, tmp_path
