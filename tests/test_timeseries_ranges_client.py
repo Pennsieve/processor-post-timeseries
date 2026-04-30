@@ -100,7 +100,8 @@ class TestTimeSeriesRangesClientCreate:
 class TestTimeSeriesRangesClientBatched:
     @responses.activate
     def test_batched_splits_into_max_chunks(self, mock_session_manager):
-        # MAX_CHUNKS_PER_REQUEST = 1000; submit 2500 → 3 batches
+        # Send more chunks than the server allows in one call. The client
+        # should split them up and make multiple trips to the server.
         max_n = TimeSeriesRangesClient.MAX_CHUNKS_PER_REQUEST
         for size in (max_n, max_n, 500):
             responses.add(

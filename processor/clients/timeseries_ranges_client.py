@@ -57,7 +57,7 @@ class TimeSeriesRangesClient(BaseClient):
 
     # timeseries-service caps request size; chunk client-side if needed.
     # Mirrors dto.MaxChunksPerCreateRangeRequest in timeseries-service.
-    MAX_CHUNKS_PER_REQUEST = 1000
+    MAX_CHUNKS_PER_REQUEST = 10_000
 
     def __init__(self, api_host2, session_manager):
         super().__init__(session_manager)
