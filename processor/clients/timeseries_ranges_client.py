@@ -6,7 +6,7 @@ from typing import Optional
 import backoff
 import requests
 
-from .base_client import BaseClient, DEFAULT_TIMEOUT, _is_client_error
+from .base_client import DEFAULT_TIMEOUT, BaseClient, _is_client_error
 
 log = logging.getLogger()
 
@@ -90,9 +90,7 @@ class TimeSeriesRangesClient(BaseClient):
         if len(chunks) == 0:
             return CreateRangesResult(requested=0, created=0, skipped=0)
         if len(chunks) > self.MAX_CHUNKS_PER_REQUEST:
-            raise ValueError(
-                f"too many chunks ({len(chunks)}); max {self.MAX_CHUNKS_PER_REQUEST}"
-            )
+            raise ValueError(f"too many chunks ({len(chunks)}); max {self.MAX_CHUNKS_PER_REQUEST}")
 
         url = f"{self.base_url}/package/{package_node_id}/ranges"
         body = {

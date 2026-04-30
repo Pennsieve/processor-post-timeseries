@@ -4,6 +4,7 @@ Exercises the full orchestration end-to-end with all four external
 services mocked: workflows, packages-service (regular + assets),
 pennsieve-api timeseries channels, timeseries-service ranges, and S3.
 """
+
 import gzip
 import json
 import os
@@ -241,9 +242,7 @@ class TestHappyPath:
 
 class TestIdempotentSkip:
     @patch("asset_uploader.boto3.client")
-    def test_active_asset_short_circuits(
-        self, mock_boto, session_manager, staged_files
-    ):
+    def test_active_asset_short_circuits(self, mock_boto, session_manager, staged_files):
         """When list_assets returns an existing 'active' asset, the function
         returns its id without uploading or registering ranges."""
         rsps = responses.RequestsMock()
@@ -305,9 +304,7 @@ class TestIdempotentSkip:
 
 class TestStaleAssetReplaced:
     @patch("asset_uploader.boto3.client")
-    def test_non_active_asset_is_deleted_and_recreated(
-        self, mock_boto, session_manager, staged_files
-    ):
+    def test_non_active_asset_is_deleted_and_recreated(self, mock_boto, session_manager, staged_files):
         """Existing asset in any non-active status → deleted and recreated."""
         s3 = MagicMock()
         mock_boto.return_value = s3
@@ -351,14 +348,9 @@ class TestStaleAssetReplaced:
 
             assert result == ASSET_ID  # the freshly created one
             # Confirm DELETE for stale id and POST for new one both happened
+            assert any(c.request.method == "DELETE" and stale_asset_id in c.request.url for c in rsps.calls)
             assert any(
-                c.request.method == "DELETE" and stale_asset_id in c.request.url
-                for c in rsps.calls
-            )
-            assert any(
-                c.request.method == "POST"
-                and _path_only(c.request.url) == "/packages/assets"
-                for c in rsps.calls
+                c.request.method == "POST" and _path_only(c.request.url) == "/packages/assets" for c in rsps.calls
             )
         finally:
             rsps.stop()
@@ -367,9 +359,7 @@ class TestStaleAssetReplaced:
 
 class TestFailureCleanup:
     @patch("asset_uploader.boto3.client")
-    def test_upload_failure_deletes_channel_then_asset(
-        self, mock_boto, session_manager, staged_files
-    ):
+    def test_upload_failure_deletes_channel_then_asset(self, mock_boto, session_manager, staged_files):
         """If upload fails *after* channel creation, the cleanup path
         must delete the just-created channel(s) AND the asset, in that
         order. Otherwise the channels survive with viewer_asset_id
@@ -414,9 +404,7 @@ class TestFailureCleanup:
                 )
 
             # Both DELETEs must have fired, in order: channel first, asset second.
-            delete_calls = [
-                c for c in rsps.calls if c.request.method == "DELETE"
-            ]
+            delete_calls = [c for c in rsps.calls if c.request.method == "DELETE"]
             assert len(delete_calls) == 2
             assert CHANNEL_NODE_ID in delete_calls[0].request.url
             assert ASSET_ID in delete_calls[1].request.url
@@ -424,9 +412,7 @@ class TestFailureCleanup:
             rsps.stop()
             rsps.reset()
 
-    def test_reused_channels_are_not_deleted_on_cleanup(
-        self, session_manager, staged_files
-    ):
+    def test_reused_channels_are_not_deleted_on_cleanup(self, session_manager, staged_files):
         """If we reused an existing channel (didn't create it this run),
         the cleanup path must NOT delete it. Only channels created in
         this ingest are owned by us."""
@@ -516,9 +502,7 @@ class TestFailureCleanup:
                     )
 
                 # No channel DELETE was attempted; only the asset DELETE.
-                delete_calls = [
-                    c for c in rsps.calls if c.request.method == "DELETE"
-                ]
+                delete_calls = [c for c in rsps.calls if c.request.method == "DELETE"]
                 assert len(delete_calls) == 1
                 assert ASSET_ID in delete_calls[0].request.url
             finally:
@@ -536,9 +520,7 @@ class TestMultiPackageIdempotency:
     """
 
     @patch("asset_uploader.boto3.client")
-    def test_active_asset_found_via_second_child_package(
-        self, mock_boto, session_manager, staged_files
-    ):
+    def test_active_asset_found_via_second_child_package(self, mock_boto, session_manager, staged_files):
         # Workflow has 3 children; the existing asset is linked to all of
         # them, but list_assets_for_package only returns it for ones
         # actually in viewer_asset_packages.
@@ -557,9 +539,7 @@ class TestMultiPackageIdempotency:
                 json={
                     "uuid": WORKFLOW_INSTANCE_ID,
                     "datasetId": DATASET_NODE_ID,
-                    "dataSources": {
-                        "src": {"packageIds": [child_a, child_b, child_c]}
-                    },
+                    "dataSources": {"src": {"packageIds": [child_a, child_b, child_c]}},
                 },
                 status=200,
             )
@@ -586,9 +566,7 @@ class TestMultiPackageIdempotency:
             rsps.add(
                 responses.GET,
                 f"{API_HOST2}/packages/assets",
-                match=[responses.matchers.query_param_matcher(
-                    {"dataset_id": DATASET_NODE_ID, "package_id": child_a}
-                )],
+                match=[responses.matchers.query_param_matcher({"dataset_id": DATASET_NODE_ID, "package_id": child_a})],
                 json={"assets": []},
                 status=200,
             )
@@ -596,9 +574,7 @@ class TestMultiPackageIdempotency:
             rsps.add(
                 responses.GET,
                 f"{API_HOST2}/packages/assets",
-                match=[responses.matchers.query_param_matcher(
-                    {"dataset_id": DATASET_NODE_ID, "package_id": child_b}
-                )],
+                match=[responses.matchers.query_param_matcher({"dataset_id": DATASET_NODE_ID, "package_id": child_b})],
                 json={
                     "assets": [
                         {
@@ -634,9 +610,7 @@ class TestMultiPackageIdempotency:
             assert posts == []
             # Iteration stopped after second child — third was never queried
             assets_lookups = [
-                c for c in rsps.calls
-                if c.request.method == "GET"
-                and "/packages/assets" in c.request.url
+                c for c in rsps.calls if c.request.method == "GET" and "/packages/assets" in c.request.url
             ]
             assert len(assets_lookups) == 2
         finally:
@@ -656,9 +630,15 @@ class TestFailFastOnMalformedFiles:
         output.mkdir()
         # Metadata filename does NOT contain channel-NNNNN
         meta = {
-            "name": "ch-0", "start": 0, "end": 1000, "unit": "uV",
-            "rate": 1000.0, "type": "CONTINUOUS", "group": "default",
-            "lastAnnotation": 0, "properties": [],
+            "name": "ch-0",
+            "start": 0,
+            "end": 1000,
+            "unit": "uV",
+            "rate": 1000.0,
+            "type": "CONTINUOUS",
+            "group": "default",
+            "lastAnnotation": 0,
+            "properties": [],
         }
         (output / "weird-name.metadata.json").write_text(json.dumps(meta))
         chunk = output / "channel-00000_0_1000.bin.gz"
@@ -671,9 +651,15 @@ class TestFailFastOnMalformedFiles:
         output = tmp_path / "output"
         output.mkdir()
         meta = {
-            "name": "ch-0", "start": 0, "end": 1000, "unit": "uV",
-            "rate": 1000.0, "type": "CONTINUOUS", "group": "default",
-            "lastAnnotation": 0, "properties": [],
+            "name": "ch-0",
+            "start": 0,
+            "end": 1000,
+            "unit": "uV",
+            "rate": 1000.0,
+            "type": "CONTINUOUS",
+            "group": "default",
+            "lastAnnotation": 0,
+            "properties": [],
         }
         (output / "channel-00000.metadata.json").write_text(json.dumps(meta))
         chunk = output / "wrong-prefix_0_1000.bin.gz"
@@ -686,9 +672,15 @@ class TestFailFastOnMalformedFiles:
         output = tmp_path / "output"
         output.mkdir()
         meta = {
-            "name": "ch-0", "start": 0, "end": 1000, "unit": "uV",
-            "rate": 1000.0, "type": "CONTINUOUS", "group": "default",
-            "lastAnnotation": 0, "properties": [],
+            "name": "ch-0",
+            "start": 0,
+            "end": 1000,
+            "unit": "uV",
+            "rate": 1000.0,
+            "type": "CONTINUOUS",
+            "group": "default",
+            "lastAnnotation": 0,
+            "properties": [],
         }
         (output / "channel-00000.metadata.json").write_text(json.dumps(meta))
         # Only metadata for index 0; chunk references index 1
@@ -744,9 +736,7 @@ class TestFailFastOnMalformedFiles:
         )
 
     @patch("asset_uploader.boto3.client")
-    def test_unparseable_metadata_filename_raises_and_cleans_up(
-        self, mock_boto, session_manager, tmp_path
-    ):
+    def test_unparseable_metadata_filename_raises_and_cleans_up(self, mock_boto, session_manager, tmp_path):
         rsps = responses.RequestsMock(assert_all_requests_are_fired=False)
         rsps.start()
         try:
@@ -765,18 +755,13 @@ class TestFailFastOnMalformedFiles:
 
             # No upload happened; cleanup DELETE fired
             mock_boto.assert_not_called()
-            assert any(
-                c.request.method == "DELETE" and ASSET_ID in c.request.url
-                for c in rsps.calls
-            )
+            assert any(c.request.method == "DELETE" and ASSET_ID in c.request.url for c in rsps.calls)
         finally:
             rsps.stop()
             rsps.reset()
 
     @patch("asset_uploader.boto3.client")
-    def test_unparseable_chunk_filename_raises_and_cleans_up(
-        self, mock_boto, session_manager, tmp_path
-    ):
+    def test_unparseable_chunk_filename_raises_and_cleans_up(self, mock_boto, session_manager, tmp_path):
         rsps = responses.RequestsMock(assert_all_requests_are_fired=False)
         rsps.start()
         try:
@@ -794,18 +779,13 @@ class TestFailFastOnMalformedFiles:
                 )
 
             mock_boto.assert_not_called()
-            assert any(
-                c.request.method == "DELETE" and ASSET_ID in c.request.url
-                for c in rsps.calls
-            )
+            assert any(c.request.method == "DELETE" and ASSET_ID in c.request.url for c in rsps.calls)
         finally:
             rsps.stop()
             rsps.reset()
 
     @patch("asset_uploader.boto3.client")
-    def test_chunk_with_no_resolved_channel_raises_and_cleans_up(
-        self, mock_boto, session_manager, tmp_path
-    ):
+    def test_chunk_with_no_resolved_channel_raises_and_cleans_up(self, mock_boto, session_manager, tmp_path):
         rsps = responses.RequestsMock(assert_all_requests_are_fired=False)
         rsps.start()
         try:
@@ -823,19 +803,14 @@ class TestFailFastOnMalformedFiles:
                 )
 
             mock_boto.assert_not_called()
-            assert any(
-                c.request.method == "DELETE" and ASSET_ID in c.request.url
-                for c in rsps.calls
-            )
+            assert any(c.request.method == "DELETE" and ASSET_ID in c.request.url for c in rsps.calls)
         finally:
             rsps.stop()
             rsps.reset()
 
 
 class TestEmptyDirectory:
-    def test_no_files_returns_none_without_calling_services(
-        self, session_manager, tmp_path
-    ):
+    def test_no_files_returns_none_without_calling_services(self, session_manager, tmp_path):
         empty = tmp_path / "empty"
         empty.mkdir()
 

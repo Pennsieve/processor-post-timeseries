@@ -21,10 +21,7 @@ def credentials():
 
 class TestRelativeKeyForChunk:
     def test_strips_directory(self):
-        assert (
-            relative_key_for_chunk("/data/output/N:channel:abc_0_1000.bin.gz")
-            == "N:channel:abc_0_1000.bin.gz"
-        )
+        assert relative_key_for_chunk("/data/output/N:channel:abc_0_1000.bin.gz") == "N:channel:abc_0_1000.bin.gz"
 
     def test_no_directory_passthrough(self):
         assert relative_key_for_chunk("foo.bin.gz") == "foo.bin.gz"
@@ -65,14 +62,28 @@ class TestAssetUploaderUploadFiles:
 
         # Each file's key is the credentials.key_prefix + relative_key
         expected_calls = [
-            ((str(tmp_path / "chunk_0.bin.gz"), "pennsieve-viewer-assets",
-              "viewer-assets/O19/D2049/asset-uuid/chunk_0.bin.gz"),),
-            ((str(tmp_path / "chunk_1.bin.gz"), "pennsieve-viewer-assets",
-              "viewer-assets/O19/D2049/asset-uuid/chunk_1.bin.gz"),),
-            ((str(tmp_path / "chunk_2.bin.gz"), "pennsieve-viewer-assets",
-              "viewer-assets/O19/D2049/asset-uuid/chunk_2.bin.gz"),),
+            (
+                (
+                    str(tmp_path / "chunk_0.bin.gz"),
+                    "pennsieve-viewer-assets",
+                    "viewer-assets/O19/D2049/asset-uuid/chunk_0.bin.gz",
+                ),
+            ),
+            (
+                (
+                    str(tmp_path / "chunk_1.bin.gz"),
+                    "pennsieve-viewer-assets",
+                    "viewer-assets/O19/D2049/asset-uuid/chunk_1.bin.gz",
+                ),
+            ),
+            (
+                (
+                    str(tmp_path / "chunk_2.bin.gz"),
+                    "pennsieve-viewer-assets",
+                    "viewer-assets/O19/D2049/asset-uuid/chunk_2.bin.gz",
+                ),
+            ),
         ]
-        actual_calls = [tuple(c.args for c in s3.upload_file.call_args_list)]
         # Order may be parallel-shuffled with workers > 1; verify set equality
         assert s3.upload_file.call_count == 3
         actual_args_set = {c.args for c in s3.upload_file.call_args_list}
@@ -85,10 +96,7 @@ class TestAssetUploaderUploadFiles:
             "chunk_1.bin.gz",
             "chunk_2.bin.gz",
         ]
-        assert all(
-            r.full_key.startswith("viewer-assets/O19/D2049/asset-uuid/")
-            for r in results
-        )
+        assert all(r.full_key.startswith("viewer-assets/O19/D2049/asset-uuid/") for r in results)
 
     @patch("asset_uploader.boto3.client")
     def test_returns_chunk_upload_result_per_file(self, mock_boto, credentials, tmp_path):
@@ -102,10 +110,7 @@ class TestAssetUploaderUploadFiles:
         assert len(results) == 1
         assert isinstance(results[0], ChunkUploadResult)
         assert results[0].relative_key == "rel.bin.gz"
-        assert (
-            results[0].full_key
-            == "viewer-assets/O19/D2049/asset-uuid/rel.bin.gz"
-        )
+        assert results[0].full_key == "viewer-assets/O19/D2049/asset-uuid/rel.bin.gz"
 
     @patch("asset_uploader.boto3.client")
     def test_empty_input_does_not_upload(self, mock_boto, credentials):

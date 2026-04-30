@@ -104,7 +104,7 @@ def create_nwb_file(
     print("Generating NWB file with:")
     print(f"  Target size: {target_size_bytes / (1024**2):.2f} MB")
     print(f"  Samples: {num_samples:,}")
-    print(f"  Duration: {duration_seconds:.2f} seconds ({duration_seconds/3600:.2f} hours)")
+    print(f"  Duration: {duration_seconds:.2f} seconds ({duration_seconds / 3600:.2f} hours)")
     print(f"  Sampling rate: {sampling_rate} Hz")
     print(f"  Channel 1 frequency: {freq1} Hz")
     print(f"  Channel 2 frequency: {freq2} Hz")
@@ -273,7 +273,7 @@ Examples:
         print(f"  Path: {result['output_path']}")
         print(f"  Channels: {result['num_channels']}")
         print(f"  Samples per channel: {result['num_samples']:,}")
-        print(f"  Duration: {result['duration_seconds']:.2f}s ({result['duration_seconds']/3600:.2f}h)")
+        print(f"  Duration: {result['duration_seconds']:.2f}s ({result['duration_seconds'] / 3600:.2f}h)")
         print(f"  Sampling rate: {result['sampling_rate']} Hz")
         print(f"  Channel frequencies: {result['channel_frequencies']} Hz")
 

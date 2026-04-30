@@ -6,7 +6,6 @@ import responses
 from clients.packages_assets_client import (
     CreatedAsset,
     PackagesAssetsClient,
-    UploadCredentials,
     ViewerAsset,
 )
 
@@ -158,9 +157,7 @@ class TestPackagesAssetsClientList:
         )
 
         client = PackagesAssetsClient("https://api2.test.com", mock_session_manager)
-        result = client.list_assets_for_package(
-            dataset_id="N:dataset:abc", package_id="N:package:p1"
-        )
+        result = client.list_assets_for_package(dataset_id="N:dataset:abc", package_id="N:package:p1")
 
         assert len(result) == 1
         assert isinstance(result[0], ViewerAsset)
@@ -199,9 +196,7 @@ class TestPackagesAssetsClientUpdate:
         )
 
         client = PackagesAssetsClient("https://api2.test.com", mock_session_manager)
-        result = client.update_asset(
-            asset_id="uuid-1", dataset_id="N:dataset:abc", status="active"
-        )
+        result = client.update_asset(asset_id="uuid-1", dataset_id="N:dataset:abc", status="active")
 
         assert result.status == "active"
         body = json.loads(responses.calls[0].request.body)

@@ -72,8 +72,7 @@ class TestTimeSeriesRangesClientCreate:
     def test_create_ranges_rejects_oversized_batch(self, mock_session_manager):
         client = TimeSeriesRangesClient("https://api2.test.com", mock_session_manager)
         oversize = [
-            RangeChunk("N:channel:c", i, i + 1, f"k_{i}.bin.gz")
-            for i in range(client.MAX_CHUNKS_PER_REQUEST + 1)
+            RangeChunk("N:channel:c", i, i + 1, f"k_{i}.bin.gz") for i in range(client.MAX_CHUNKS_PER_REQUEST + 1)
         ]
         with pytest.raises(ValueError, match="too many chunks"):
             client.create_ranges("N:package:p1", "asset-uuid", oversize)
@@ -112,10 +111,7 @@ class TestTimeSeriesRangesClientBatched:
             )
 
         client = TimeSeriesRangesClient("https://api2.test.com", mock_session_manager)
-        chunks = [
-            RangeChunk("N:channel:c", i, i + 1, f"k_{i}.bin.gz")
-            for i in range(2 * max_n + 500)
-        ]
+        chunks = [RangeChunk("N:channel:c", i, i + 1, f"k_{i}.bin.gz") for i in range(2 * max_n + 500)]
 
         result = client.create_ranges_batched("N:package:p1", "asset-uuid", chunks)
         assert result.requested == 2 * max_n + 500
@@ -134,8 +130,7 @@ class TestTimeSeriesRangesClientBatched:
 
         client = TimeSeriesRangesClient("https://api2.test.com", mock_session_manager)
         chunks = [
-            RangeChunk("N:channel:c", i, i + 1, f"k_{i}.bin.gz")
-            for i in range(client.MAX_CHUNKS_PER_REQUEST + 1)
+            RangeChunk("N:channel:c", i, i + 1, f"k_{i}.bin.gz") for i in range(client.MAX_CHUNKS_PER_REQUEST + 1)
         ]
 
         with pytest.raises(Exception):

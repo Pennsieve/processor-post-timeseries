@@ -50,7 +50,11 @@ class TestWorkflowClientGetWorkflowInstance:
         responses.add(
             responses.GET,
             "https://api.test.com/compute/workflows/runs/wf-instance-123",
-            json={"uuid": "wf-instance-123", "datasetId": "dataset-456", "dataSources": {"source-1": {"packageIds": ["pkg-1", "pkg-2", "pkg-3"]}}},
+            json={
+                "uuid": "wf-instance-123",
+                "datasetId": "dataset-456",
+                "dataSources": {"source-1": {"packageIds": ["pkg-1", "pkg-2", "pkg-3"]}},
+            },
             status=200,
         )
 
@@ -125,7 +129,10 @@ class TestWorkflowClientRetryBehavior:
         """Test that get_workflow_instance retries after 401."""
         # First call returns 401
         responses.add(
-            responses.GET, "https://api.test.com/compute/workflows/runs/wf-123", json={"error": "Unauthorized"}, status=401
+            responses.GET,
+            "https://api.test.com/compute/workflows/runs/wf-123",
+            json={"error": "Unauthorized"},
+            status=401,
         )
         # Second call succeeds
         responses.add(

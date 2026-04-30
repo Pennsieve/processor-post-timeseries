@@ -4,6 +4,7 @@ The credentials are short-lived (~1 hour). For very long uploads,
 this will need a refresh mechanism (see packages-service POST
 /assets/{id}/upload-credentials, not yet implemented).
 """
+
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -11,7 +12,6 @@ from dataclasses import dataclass
 
 import boto3
 import botocore.exceptions
-
 from clients.packages_assets_client import UploadCredentials
 
 log = logging.getLogger()
@@ -81,10 +81,7 @@ class AssetUploader:
             results[index] = ChunkUploadResult(relative_key=relative_key, full_key=full_key)
 
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
-            futures = [
-                executor.submit(_put, i, local, relative)
-                for i, (local, relative) in enumerate(files)
-            ]
+            futures = [executor.submit(_put, i, local, relative) for i, (local, relative) in enumerate(files)]
             # Wait for all and surface the first exception.
             for future in futures:
                 future.result()

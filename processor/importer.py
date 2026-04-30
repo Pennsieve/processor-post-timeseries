@@ -18,7 +18,6 @@ from clients import (
     RangeChunk,
     TimeSeriesClient,
     TimeSeriesRangesClient,
-    ViewerAsset,
     WorkflowClient,
 )
 from constants import TIME_SERIES_BINARY_FILE_EXTENSION, TIME_SERIES_METADATA_FILE_EXTENSION
@@ -161,20 +160,16 @@ def import_timeseries_via_assets(
         )
         if not channels_by_index:
             raise RuntimeError(
-                "no channels were resolved from staged metadata files; "
-                "refusing to mark asset active with empty data"
+                "no channels were resolved from staged metadata files; refusing to mark asset active with empty data"
             )
 
         # Rename data files to use channel node ids in their basenames
         # (matching the legacy naming convention so timeseries.ranges.location
         # aligns with what streaming expects to fetch from S3).
-        renamed_data_files = _rename_data_files_to_node_ids(
-            timeseries_data_files, channels_by_index
-        )
+        renamed_data_files = _rename_data_files_to_node_ids(timeseries_data_files, channels_by_index)
         if not renamed_data_files:
             raise RuntimeError(
-                "no chunk files were resolved from the output directory; "
-                "refusing to mark asset active with empty data"
+                "no chunk files were resolved from the output directory; refusing to mark asset active with empty data"
             )
 
         # Upload to S3 using the STS creds returned by create_asset.
@@ -187,9 +182,7 @@ def import_timeseries_via_assets(
         # Register ranges. Build chunks from filenames + channel map.
         ranges_client = TimeSeriesRangesClient(api2_host, session_manager)
         chunks = _build_range_chunks(uploads, channels_by_index)
-        result = ranges_client.create_ranges_batched(
-            target_package_id, asset.id, chunks
-        )
+        result = ranges_client.create_ranges_batched(target_package_id, asset.id, chunks)
         log.info(
             "registered ranges for asset %s: requested=%d created=%d skipped=%d",
             asset.id,
@@ -204,9 +197,7 @@ def import_timeseries_via_assets(
         # delete + recreate, and lose the channel-asset link. Let any
         # failure propagate so the cleanup path runs and the next attempt
         # starts fresh.
-        assets_client.update_asset(
-            asset.id, dataset_id=workflow_instance.dataset_id, status="active"
-        )
+        assets_client.update_asset(asset.id, dataset_id=workflow_instance.dataset_id, status="active")
 
     except Exception as e:
         log.error("asset-flow ingest failed for asset %s: %s", asset.id, e)
@@ -276,14 +267,11 @@ def _find_or_create_asset(
 
     Returns (asset, upload_credentials | None).
     """
-    match = _find_asset_by_workflow_packages(
-        assets_client, dataset_id, package_ids, asset_name, asset_type
-    )
+    match = _find_asset_by_workflow_packages(assets_client, dataset_id, package_ids, asset_name, asset_type)
 
     if match is not None and match.status == "active":
         log.info(
-            "asset %s already active for workflow packages %s; idempotent re-run, "
-            "skipping ingest",
+            "asset %s already active for workflow packages %s; idempotent re-run, skipping ingest",
             match.id,
             package_ids,
         )
@@ -291,8 +279,7 @@ def _find_or_create_asset(
 
     if match is not None:
         log.info(
-            "asset %s in status %r for workflow packages %s; assuming prior run "
-            "failed, deleting and recreating",
+            "asset %s in status %r for workflow packages %s; assuming prior run failed, deleting and recreating",
             match.id,
             match.status,
             package_ids,
@@ -329,11 +316,7 @@ def _find_asset_by_workflow_packages(
     for package_id in package_ids:
         existing = assets_client.list_assets_for_package(dataset_id, package_id)
         match = next(
-            (
-                asset
-                for asset in existing
-                if asset.name == asset_name and asset.asset_type == asset_type
-            ),
+            (asset for asset in existing if asset.name == asset_name and asset.asset_type == asset_type),
             None,
         )
         if match is not None:
@@ -367,19 +350,14 @@ def _create_or_resolve_channels(
     for file_path in timeseries_channel_files:
         match = _CHANNEL_INDEX_PATTERN.search(os.path.basename(file_path))
         if match is None:
-            raise RuntimeError(
-                f"channel metadata filename does not match expected "
-                f"channel-NNNNN pattern: {file_path}"
-            )
+            raise RuntimeError(f"channel metadata filename does not match expected channel-NNNNN pattern: {file_path}")
         channel_index = match.group(1)
 
         with open(file_path, "r") as f:
             local_channel = TimeSeriesChannel.from_dict(json.load(f))
         local_channel.viewer_asset_id = viewer_asset_id
 
-        existing = next(
-            (ec for ec in existing_channels if ec == local_channel), None
-        )
+        existing = next((ec for ec in existing_channels if ec == local_channel), None)
         if existing is not None:
             if existing.viewer_asset_id != viewer_asset_id:
                 raise RuntimeError(
@@ -397,9 +375,7 @@ def _create_or_resolve_channels(
             )
             channel = existing
         else:
-            channel = timeseries_client.create_channel(
-                package_id, local_channel
-            )
+            channel = timeseries_client.create_channel(package_id, local_channel)
             created_channel_node_ids.append(channel.id)
             log.info(
                 "package_id=%s channel_id=%s created new channel: %s",
@@ -427,10 +403,7 @@ def _rename_data_files_to_node_ids(
     for file_path in timeseries_data_files:
         match = _CHANNEL_INDEX_PATTERN.search(os.path.basename(file_path))
         if match is None:
-            raise RuntimeError(
-                f"chunk filename does not match expected channel-NNNNN_*_*.bin.gz "
-                f"pattern: {file_path}"
-            )
+            raise RuntimeError(f"chunk filename does not match expected channel-NNNNN_*_*.bin.gz pattern: {file_path}")
         channel_index = match.group(1)
         channel = channels_by_index.get(channel_index)
         if channel is None:
@@ -473,9 +446,7 @@ def _build_range_chunks(
         node_id = basename[: ts_match.start()]
         channel = channels_by_node_id.get(node_id)
         if channel is None:
-            raise ValueError(
-                f"chunk basename {basename} has no matching channel (node_id={node_id})"
-            )
+            raise ValueError(f"chunk basename {basename} has no matching channel (node_id={node_id})")
 
         chunks.append(
             RangeChunk(

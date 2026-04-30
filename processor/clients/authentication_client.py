@@ -154,7 +154,5 @@ class KeySecretAuthProvider(AuthProvider):
             self._session_token = self._cognito.refresh_token(self._refresh_token, self._session_token)
         else:
             log.info("no refresh token, re-authenticating with API key/secret")
-            self._session_token, self._refresh_token = self._cognito.authenticate(
-                self._api_key, self._api_secret
-            )
+            self._session_token, self._refresh_token = self._cognito.authenticate(self._api_key, self._api_secret)
         return self._session_token

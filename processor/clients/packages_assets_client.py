@@ -6,7 +6,7 @@ from typing import Optional
 import backoff
 import requests
 
-from .base_client import BaseClient, DEFAULT_TIMEOUT, _is_client_error
+from .base_client import DEFAULT_TIMEOUT, BaseClient, _is_client_error
 
 log = logging.getLogger()
 

@@ -40,9 +40,9 @@ class NWBElectricalSeriesReader:
         self.num_samples, self.num_channels = self.electrical_series.data.shape
 
         assert self.num_samples > 0, "Electrical series has no sample data"
-        assert (
-            len(self.electrical_series.electrodes.table) == self.num_channels
-        ), "Electrode channels do not align with data shape"
+        assert len(self.electrical_series.electrodes.table) == self.num_channels, (
+            "Electrode channels do not align with data shape"
+        )
         log.info(f"NWB file has {self.num_samples} samples")
 
         self._sampling_rate = None
@@ -51,9 +51,9 @@ class NWBElectricalSeriesReader:
 
         if self.has_explicit_timestamps:
             log.info("NWB file has explicit timestamps")
-            assert self.num_samples == len(
-                self.electrical_series.timestamps
-            ), "Differing number of sample and timestamp value"
+            assert self.num_samples == len(self.electrical_series.timestamps), (
+                "Differing number of sample and timestamp value"
+            )
         else:
             log.info("NWB file has implicit timestamps")
 
