@@ -416,6 +416,124 @@ class TestFailureCleanup:
             rsps.reset()
 
 
+class TestMultiPackageIdempotency:
+    """Re-run on a multi-package workflow finds the existing asset by
+    iterating the workflow packages — not by the parent collection
+    that determine_target_package walks up to.
+
+    This is the bug the reviewer caught: lookup-by-parent vs.
+    create-with-children produces orphan duplicate assets on re-run.
+    """
+
+    @patch("asset_uploader.boto3.client")
+    def test_active_asset_found_via_second_child_package(
+        self, mock_boto, session_manager, staged_files
+    ):
+        # Workflow has 3 children; the existing asset is linked to all of
+        # them, but list_assets_for_package only returns it for ones
+        # actually in viewer_asset_packages.
+        child_a = "N:package:mef-a"
+        child_b = "N:package:mef-b"
+        child_c = "N:package:mef-c"
+        parent = "N:collection:recording-parent"
+
+        rsps = responses.RequestsMock()
+        rsps.start()
+        try:
+            # Workflow returns the children, not the parent
+            rsps.add(
+                responses.GET,
+                f"{API_HOST2}/compute/workflows/runs/{WORKFLOW_INSTANCE_ID}",
+                json={
+                    "uuid": WORKFLOW_INSTANCE_ID,
+                    "datasetId": DATASET_NODE_ID,
+                    "dataSources": {
+                        "src": {"packageIds": [child_a, child_b, child_c]}
+                    },
+                },
+                status=200,
+            )
+            # determine_target_package walks first child to its parent
+            rsps.add(
+                responses.GET,
+                f"{API_HOST}/packages/{child_a}",
+                json={
+                    "parent": {"content": {"nodeId": parent}},
+                    "content": {"nodeId": child_a},
+                },
+                status=200,
+            )
+            # Properties are set on the parent (legacy aggregation)
+            rsps.add(
+                responses.PUT,
+                f"{API_HOST}/packages/{parent}",
+                json={},
+                status=200,
+            )
+            # Lookup by first child returns empty (this is the bug-trap:
+            # if we'd looked up by parent we'd also get empty here, then
+            # create a duplicate asset).
+            rsps.add(
+                responses.GET,
+                f"{API_HOST2}/packages/assets",
+                match=[responses.matchers.query_param_matcher(
+                    {"dataset_id": DATASET_NODE_ID, "package_id": child_a}
+                )],
+                json={"assets": []},
+                status=200,
+            )
+            # Lookup by second child returns the active asset
+            rsps.add(
+                responses.GET,
+                f"{API_HOST2}/packages/assets",
+                match=[responses.matchers.query_param_matcher(
+                    {"dataset_id": DATASET_NODE_ID, "package_id": child_b}
+                )],
+                json={
+                    "assets": [
+                        {
+                            "id": ASSET_ID,
+                            "dataset_id": DATASET_NODE_ID,
+                            "name": "mef-asset",
+                            "asset_type": "timeseries",
+                            "asset_url": "",
+                            "properties": {},
+                            "status": "active",
+                            "package_ids": [child_a, child_b, child_c],
+                            "created_at": "2026-04-30T12:00:00Z",
+                        }
+                    ]
+                },
+                status=200,
+            )
+
+            result = import_timeseries_via_assets(
+                api_host=API_HOST,
+                api2_host=API_HOST2,
+                session_manager=session_manager,
+                workflow_instance_id=WORKFLOW_INSTANCE_ID,
+                file_directory=staged_files,
+                asset_name="mef-asset",
+                asset_type="timeseries",
+            )
+
+            assert result == ASSET_ID
+            # No upload, no POST /assets — purely idempotent skip
+            mock_boto.assert_not_called()
+            posts = [c for c in rsps.calls if c.request.method == "POST"]
+            assert posts == []
+            # Iteration stopped after second child — third was never queried
+            assets_lookups = [
+                c for c in rsps.calls
+                if c.request.method == "GET"
+                and "/packages/assets" in c.request.url
+            ]
+            assert len(assets_lookups) == 2
+        finally:
+            rsps.stop()
+            rsps.reset()
+
+
 class TestEmptyDirectory:
     def test_no_files_returns_none_without_calling_services(
         self, session_manager, tmp_path
