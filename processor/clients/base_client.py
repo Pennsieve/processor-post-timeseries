@@ -5,9 +5,7 @@ import requests
 log = logging.getLogger()
 
 
-# (connect_timeout_seconds, read_timeout_seconds). Per-request override is
-# allowed but every HTTP call must pass *some* timeout — never block
-# indefinitely on a stuck service.
+# (connect_timeout_seconds, read_timeout_seconds)
 DEFAULT_TIMEOUT = (5, 30)
 
 

@@ -1,3 +1,15 @@
+"""Pennsieve time-series ingest orchestration.
+
+Two flows live here, selected by `config.LEGACY_IMPORT_FLOW`:
+
+  - `import_timeseries_via_assets` (default) — the viewer-asset flow.
+    Creates a viewer_asset via packages-service, uploads chunks to the
+    asset's S3 prefix using STS credentials, and registers ranges via
+    timeseries-service's POST /package/{id}/ranges.
+
+  - `import_timeseries_legacy` — the original Pennsieve import-manifest
+    path.
+"""
 import json
 import logging
 import os
@@ -42,15 +54,7 @@ def import_timeseries(
     config,
     session_manager,
 ):
-    """Top-level entry point. Dispatches to legacy or asset-aware flow.
-
-    Replaces the previous single-flow implementation. Behavior is selected
-    by `config.LEGACY_IMPORT_FLOW`:
-      - false (default): create a viewer_asset, upload chunks via STS,
-        register ranges in timeseries-service.
-      - true: original Pennsieve import-manifest path (kept for
-        rollback).
-    """
+    """Top-level entry point. Dispatches to legacy or asset-aware flow."""
     if config.LEGACY_IMPORT_FLOW:
         log.info("LEGACY_IMPORT_FLOW=true; using import-manifest flow")
         return import_timeseries_legacy(
@@ -475,14 +479,17 @@ def import_timeseries_legacy(
 
     Preserved verbatim for rollback. New ingests should not hit this path.
     """
+    # gather all the time series files from the output directory
     timeseries_data_files, timeseries_channel_files = _collect_timeseries_files(file_directory)
     if not timeseries_channel_files or not timeseries_data_files:
         log.info("no time series channels or data")
         return None
 
+    # fetch workflow instance for parameters (dataset_id, package_id, etc.)
     workflow_client = WorkflowClient(api2_host, session_manager)
     workflow_instance = workflow_client.get_workflow_instance(workflow_instance_id)
 
+    # fetch the target package for channel data and time series properties
     packages_client = PackagesClient(api_host, session_manager)
     package_id = determine_target_package(packages_client, workflow_instance.package_ids)
     if not package_id:
@@ -497,6 +504,7 @@ def import_timeseries_legacy(
     timeseries_client = TimeSeriesClient(api_host, session_manager)
     existing_channels = timeseries_client.get_package_channels(package_id)
 
+    # used to strip the channel index (intra-processor channel identifier) off both data and metadata time series files
     channels = {}
     for file_path in timeseries_channel_files:
         channel_index = _CHANNEL_INDEX_PATTERN.search(os.path.basename(file_path)).group(1)
@@ -515,6 +523,10 @@ def import_timeseries_legacy(
         channel.index = channel_index
         channels[channel_index] = channel
 
+    # (to match the currently existing pattern)
+    # replace the prefix on the time series binary data chunk file name with the channel node ID e.g.
+    # channel-00000_1549968912000000_1549968926998750.bin.gz
+    #  => N:channel:c957d73f-84ca-41d9-83b0-d23c2000a6e6_1549968912000000_1549968926998750.bin.gz
     import_files = []
     for file_path in timeseries_data_files:
         channel_index = _CHANNEL_INDEX_PATTERN.search(os.path.basename(file_path)).group(1)
@@ -526,6 +538,7 @@ def import_timeseries_legacy(
         )
         import_files.append(import_file)
 
+    # initialize import with batched manifest creation to avoid API Gateway size limits
     import_client = ImportClient(api2_host, session_manager)
     import_id = import_client.create_batched(
         workflow_instance.id, workflow_instance.dataset_id, package_id, import_files
@@ -533,9 +546,11 @@ def import_timeseries_legacy(
 
     log.info(f"import_id={import_id} initialized import with {len(import_files)} time series data files for upload")
 
+    # track time series file upload count
     upload_counter = Value("i", 0)
     upload_counter_lock = Lock()
 
+    # upload time series files to Pennsieve S3 import bucket
     @backoff.on_exception(backoff.expo, requests.exceptions.RequestException, max_tries=5)
     def upload_timeseries_file(timeseries_file):
         try:
@@ -562,6 +577,7 @@ def import_timeseries_legacy(
 
     successful_uploads = []
     with ThreadPoolExecutor(max_workers=4) as executor:
+        # wrapping in a list forces the executor to wait for all threads to finish uploading time series files
         successful_uploads = list(executor.map(upload_timeseries_file, import_files))
 
     log.info(f"import_id={import_id} uploaded {upload_counter.value} time series files")

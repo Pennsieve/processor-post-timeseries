@@ -13,10 +13,7 @@ log = logging.getLogger()
 
 @dataclass
 class UploadCredentials:
-    """Short-lived STS credentials returned alongside a created asset.
-
-    Scoped via session policy to PUT under bucket/key_prefix only.
-    """
+    """Short-lived STS credentials returned alongside a created asset."""
 
     access_key_id: str
     secret_access_key: str
@@ -69,10 +66,7 @@ class CreatedAsset:
 
 
 class PackagesAssetsClient(BaseClient):
-    """Client for packages-service viewer-asset endpoints.
-
-    Base URL: {api_host2}/packages
-    """
+    """Client for packages-service viewer-asset endpoints."""
 
     def __init__(self, api_host2, session_manager):
         super().__init__(session_manager)
