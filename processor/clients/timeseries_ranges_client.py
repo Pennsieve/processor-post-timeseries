@@ -1,12 +1,12 @@
 import json
 import logging
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Optional
 
 import backoff
 import requests
 
-from .base_client import BaseClient, _is_client_error
+from .base_client import BaseClient, DEFAULT_TIMEOUT, _is_client_error
 
 log = logging.getLogger()
 
@@ -72,7 +72,7 @@ class TimeSeriesRangesClient(BaseClient):
 
     @backoff.on_exception(
         backoff.expo,
-        requests.HTTPError,
+        requests.RequestException,
         max_tries=3,
         giveup=_is_client_error,
     )
@@ -101,7 +101,12 @@ class TimeSeriesRangesClient(BaseClient):
         }
 
         try:
-            response = requests.post(url, headers=self._auth_headers(), json=body)
+            response = requests.post(
+                url,
+                headers=self._auth_headers(),
+                json=body,
+                timeout=DEFAULT_TIMEOUT,
+            )
             response.raise_for_status()
             return CreateRangesResult.from_dict(response.json())
         except requests.HTTPError as e:

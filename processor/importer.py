@@ -140,14 +140,19 @@ def import_timeseries_via_assets(
     if upload_credentials is None:
         return asset.id
 
+    # Channels we create during this ingest (not reused from a prior run).
+    # Tracked so the cleanup path can delete them if anything downstream
+    # fails — otherwise they outlive the asset and break the next re-run.
+    created_channel_node_ids: list[str] = []
+    timeseries_client = TimeSeriesClient(api_host, session_manager)
+
     try:
         # Channels: create with viewer_asset_id set so timeseries-service
         # accepts the range registration. Reuse existing channels if name/
         # type/rate match.
-        timeseries_client = TimeSeriesClient(api_host, session_manager)
         existing_channels = timeseries_client.get_package_channels(target_package_id)
 
-        channels_by_index = _create_or_resolve_channels(
+        channels_by_index, created_channel_node_ids = _create_or_resolve_channels(
             timeseries_client,
             target_package_id,
             timeseries_channel_files,
@@ -193,24 +198,44 @@ def import_timeseries_via_assets(
             result.skipped,
         )
 
-        # Flip status to active. Failures here are non-fatal — the asset
-        # row exists and the data is queryable; status is informational.
-        try:
-            assets_client.update_asset(
-                asset.id, dataset_id=workflow_instance.dataset_id, status="active"
-            )
-        except requests.HTTPError as e:
-            log.warning("failed to mark asset %s active (data already imported): %s", asset.id, e)
+        # Flip status to active. This MUST succeed — status='active' is
+        # what makes re-runs idempotent. Swallowing it would leave the
+        # asset in 'created', and the next run would treat it as stale,
+        # delete + recreate, and lose the channel-asset link. Let any
+        # failure propagate so the cleanup path runs and the next attempt
+        # starts fresh.
+        assets_client.update_asset(
+            asset.id, dataset_id=workflow_instance.dataset_id, status="active"
+        )
 
     except Exception as e:
         log.error("asset-flow ingest failed for asset %s: %s", asset.id, e)
-        # Delete the asset row to trigger the S3 cleanup queue.
-        # If this delete also fails we accept the orphan and re-raise the
-        # original error.
+        # Delete channels we created BEFORE deleting the asset.
+        # channels.viewer_asset_id has no FK to viewer_assets — deleting
+        # the asset alone would orphan our newly-created channels with a
+        # dangling viewer_asset_id, and the next run's
+        # _create_or_resolve_channels would raise on the mismatch instead
+        # of a clean restart. Reused channels (not in the created list)
+        # are left untouched.
+        for channel_node_id in created_channel_node_ids:
+            try:
+                timeseries_client.delete_channel(target_package_id, channel_node_id)
+                log.info("deleted channel %s during cleanup", channel_node_id)
+            except Exception as channel_cleanup_err:
+                # Best-effort; keep going so the asset still gets cleaned
+                # up. A leftover channel is recoverable in code; a
+                # leftover asset row + S3 prefix is worse.
+                log.error(
+                    "failed to delete channel %s during cleanup: %s",
+                    channel_node_id,
+                    channel_cleanup_err,
+                )
+
+        # Now delete the asset row → triggers the S3 cleanup queue.
         try:
             assets_client.delete_asset(asset.id, dataset_id=workflow_instance.dataset_id)
             log.info("queued asset %s for cleanup", asset.id)
-        except requests.HTTPError as cleanup_err:
+        except Exception as cleanup_err:
             log.error(
                 "failed to delete failed asset %s — will need manual cleanup: %s",
                 asset.id,
@@ -322,15 +347,23 @@ def _create_or_resolve_channels(
     timeseries_channel_files: list[str],
     existing_channels: list[TimeSeriesChannel],
     viewer_asset_id: str,
-) -> dict[str, TimeSeriesChannel]:
+) -> tuple[dict[str, TimeSeriesChannel], list[str]]:
     """For each channel metadata file, return a TimeSeriesChannel keyed by index.
 
     Reuses an existing channel when name/type/rate match, otherwise
     creates a new one with viewer_asset_id set. Mutates the returned
     channels' .index field so callers can map channel filenames to
     channel objects by index.
+
+    Returns:
+        (channels_by_index, created_channel_node_ids)
+        - channels_by_index: dict {channel-index → TimeSeriesChannel}
+        - created_channel_node_ids: list of node ids the *current* ingest
+          created (i.e. did not reuse). The caller must delete these on
+          ingest failure so that orphan channels don't outlive the asset.
     """
     channels: dict[str, TimeSeriesChannel] = {}
+    created_channel_node_ids: list[str] = []
     for file_path in timeseries_channel_files:
         match = _CHANNEL_INDEX_PATTERN.search(os.path.basename(file_path))
         if match is None:
@@ -367,6 +400,7 @@ def _create_or_resolve_channels(
             channel = timeseries_client.create_channel(
                 package_id, local_channel
             )
+            created_channel_node_ids.append(channel.id)
             log.info(
                 "package_id=%s channel_id=%s created new channel: %s",
                 package_id,
@@ -377,7 +411,7 @@ def _create_or_resolve_channels(
         channel.index = channel_index
         channels[channel_index] = channel
 
-    return channels
+    return channels, created_channel_node_ids
 
 
 def _rename_data_files_to_node_ids(

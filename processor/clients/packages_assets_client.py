@@ -6,7 +6,7 @@ from typing import Optional
 import backoff
 import requests
 
-from .base_client import BaseClient, _is_client_error
+from .base_client import BaseClient, DEFAULT_TIMEOUT, _is_client_error
 
 log = logging.getLogger()
 
@@ -87,7 +87,7 @@ class PackagesAssetsClient(BaseClient):
 
     @backoff.on_exception(
         backoff.expo,
-        requests.HTTPError,
+        requests.RequestException,
         max_tries=3,
         giveup=_is_client_error,
     )
@@ -112,7 +112,13 @@ class PackagesAssetsClient(BaseClient):
             body["properties"] = properties
 
         try:
-            response = requests.post(url, params=params, headers=self._auth_headers(), json=body)
+            response = requests.post(
+                url,
+                params=params,
+                headers=self._auth_headers(),
+                json=body,
+                timeout=DEFAULT_TIMEOUT,
+            )
             response.raise_for_status()
             data = response.json()
             return CreatedAsset(
@@ -128,7 +134,7 @@ class PackagesAssetsClient(BaseClient):
 
     @backoff.on_exception(
         backoff.expo,
-        requests.HTTPError,
+        requests.RequestException,
         max_tries=3,
         giveup=_is_client_error,
     )
@@ -139,7 +145,12 @@ class PackagesAssetsClient(BaseClient):
         params = {"dataset_id": dataset_id, "package_id": package_id}
 
         try:
-            response = requests.get(url, params=params, headers=self._auth_headers())
+            response = requests.get(
+                url,
+                params=params,
+                headers=self._auth_headers(),
+                timeout=DEFAULT_TIMEOUT,
+            )
             response.raise_for_status()
             data = response.json()
             return [ViewerAsset.from_dict(a) for a in data.get("assets", [])]
@@ -149,7 +160,7 @@ class PackagesAssetsClient(BaseClient):
 
     @backoff.on_exception(
         backoff.expo,
-        requests.HTTPError,
+        requests.RequestException,
         max_tries=3,
         giveup=_is_client_error,
     )
@@ -174,7 +185,13 @@ class PackagesAssetsClient(BaseClient):
             body["package_ids"] = package_ids
 
         try:
-            response = requests.patch(url, params=params, headers=self._auth_headers(), json=body)
+            response = requests.patch(
+                url,
+                params=params,
+                headers=self._auth_headers(),
+                json=body,
+                timeout=DEFAULT_TIMEOUT,
+            )
             response.raise_for_status()
             return ViewerAsset.from_dict(response.json())
         except requests.HTTPError as e:
@@ -183,7 +200,7 @@ class PackagesAssetsClient(BaseClient):
 
     @backoff.on_exception(
         backoff.expo,
-        requests.HTTPError,
+        requests.RequestException,
         max_tries=3,
         giveup=_is_client_error,
     )
@@ -194,7 +211,12 @@ class PackagesAssetsClient(BaseClient):
         params = {"dataset_id": dataset_id}
 
         try:
-            response = requests.delete(url, params=params, headers=self._auth_headers())
+            response = requests.delete(
+                url,
+                params=params,
+                headers=self._auth_headers(),
+                timeout=DEFAULT_TIMEOUT,
+            )
             response.raise_for_status()
         except requests.HTTPError as e:
             log.error("failed to delete viewer asset %s: %s", asset_id, e)

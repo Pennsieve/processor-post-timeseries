@@ -367,11 +367,13 @@ class TestStaleAssetReplaced:
 
 class TestFailureCleanup:
     @patch("asset_uploader.boto3.client")
-    def test_upload_failure_triggers_asset_delete(
+    def test_upload_failure_deletes_channel_then_asset(
         self, mock_boto, session_manager, staged_files
     ):
-        """If upload fails after asset creation, the asset is DELETEd to
-        enqueue S3 cleanup, and the original error propagates."""
+        """If upload fails *after* channel creation, the cleanup path
+        must delete the just-created channel(s) AND the asset, in that
+        order. Otherwise the channels survive with viewer_asset_id
+        pointing at the now-deleted asset, breaking the next re-run."""
         import botocore.exceptions
 
         s3 = MagicMock()
@@ -381,13 +383,19 @@ class TestFailureCleanup:
         )
         mock_boto.return_value = s3
 
-        # Upload fails before ranges/patch responses get hit; allow the
-        # happy-path setup to register responses that don't fire.
+        # Upload fails after channel create; ranges/patch responses get
+        # registered by the happy-path setup but never fire.
         rsps = responses.RequestsMock(assert_all_requests_are_fired=False)
         rsps.start()
         try:
             _wire_happy_path(rsps)
-            # DELETE for cleanup after upload fails
+            # DELETE for the channel created during this run
+            rsps.add(
+                responses.DELETE,
+                f"{API_HOST}/timeseries/{PACKAGE_NODE_ID}/channels/{CHANNEL_NODE_ID}",
+                status=204,
+            )
+            # DELETE for the asset cleanup
             rsps.add(
                 responses.DELETE,
                 f"{API_HOST2}/packages/assets/{ASSET_ID}",
@@ -405,15 +413,117 @@ class TestFailureCleanup:
                     asset_type="timeseries",
                 )
 
-            # Verify the cleanup DELETE actually fired
+            # Both DELETEs must have fired, in order: channel first, asset second.
             delete_calls = [
-                c for c in rsps.calls
-                if c.request.method == "DELETE" and ASSET_ID in c.request.url
+                c for c in rsps.calls if c.request.method == "DELETE"
             ]
-            assert len(delete_calls) == 1
+            assert len(delete_calls) == 2
+            assert CHANNEL_NODE_ID in delete_calls[0].request.url
+            assert ASSET_ID in delete_calls[1].request.url
         finally:
             rsps.stop()
             rsps.reset()
+
+    def test_reused_channels_are_not_deleted_on_cleanup(
+        self, session_manager, staged_files
+    ):
+        """If we reused an existing channel (didn't create it this run),
+        the cleanup path must NOT delete it. Only channels created in
+        this ingest are owned by us."""
+        import botocore.exceptions
+
+        with patch("asset_uploader.boto3.client") as mock_boto:
+            s3 = MagicMock()
+            s3.upload_file.side_effect = botocore.exceptions.ClientError(
+                {"Error": {"Code": "ExpiredToken"}},
+                "PutObject",
+            )
+            mock_boto.return_value = s3
+
+            rsps = responses.RequestsMock(assert_all_requests_are_fired=False)
+            rsps.start()
+            try:
+                # Same as happy path but with a pre-existing channel that
+                # we'll reuse rather than create. Note: matches by
+                # name+type+rate per TimeSeriesChannel.__eq__.
+                rsps.add(
+                    responses.GET,
+                    f"{API_HOST2}/compute/workflows/runs/{WORKFLOW_INSTANCE_ID}",
+                    json=_workflow_response(),
+                    status=200,
+                )
+                rsps.add(
+                    responses.PUT,
+                    f"{API_HOST}/packages/{PACKAGE_NODE_ID}",
+                    json={},
+                    status=200,
+                )
+                rsps.add(
+                    responses.GET,
+                    f"{API_HOST2}/packages/assets",
+                    json={"assets": []},
+                    status=200,
+                )
+                rsps.add(
+                    responses.POST,
+                    f"{API_HOST2}/packages/assets",
+                    json=_asset_create_response(),
+                    status=201,
+                )
+                # Existing channel matching the staged metadata file —
+                # already linked to the asset we're about to use.
+                rsps.add(
+                    responses.GET,
+                    f"{API_HOST}/timeseries/{PACKAGE_NODE_ID}/channels",
+                    json=[
+                        {
+                            "content": {
+                                "id": CHANNEL_NODE_ID,
+                                "name": "ch-0",
+                                "start": 0,
+                                "end": 1000,
+                                "unit": "uV",
+                                "rate": 1000.0,
+                                "channelType": "CONTINUOUS",
+                                "group": "default",
+                                "lastAnnotation": 0,
+                                "viewerAssetId": ASSET_ID,
+                            },
+                            "properties": [],
+                        }
+                    ],
+                    status=200,
+                )
+                # Asset cleanup DELETE; explicitly DO NOT register a
+                # channel DELETE — if the orchestrator tries to delete
+                # the reused channel, this test fails with a
+                # ConnectionError on the unmatched URL.
+                rsps.add(
+                    responses.DELETE,
+                    f"{API_HOST2}/packages/assets/{ASSET_ID}",
+                    status=204,
+                )
+
+                with pytest.raises(botocore.exceptions.ClientError):
+                    import_timeseries_via_assets(
+                        api_host=API_HOST,
+                        api2_host=API_HOST2,
+                        session_manager=session_manager,
+                        workflow_instance_id=WORKFLOW_INSTANCE_ID,
+                        file_directory=staged_files,
+                        asset_name="mef-asset",
+                        asset_type="timeseries",
+                    )
+
+                # No channel DELETE was attempted; only the asset DELETE.
+                delete_calls = [
+                    c for c in rsps.calls if c.request.method == "DELETE"
+                ]
+                assert len(delete_calls) == 1
+                assert ASSET_ID in delete_calls[0].request.url
+            finally:
+                rsps.stop()
+                rsps.reset()
 
 
 class TestMultiPackageIdempotency:

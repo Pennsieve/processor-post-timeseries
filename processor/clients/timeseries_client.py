@@ -44,6 +44,35 @@ class TimeSeriesClient(BaseClient):
             raise e
 
     @BaseClient.retry_with_refresh
+    def delete_channel(self, package_id, channel_id):
+        """Delete a single channel by node id. Best-effort; logs and
+        re-raises on failure so callers can decide how to handle it.
+
+        Used during asset-flow ingest cleanup: when an ingest fails
+        after channels were created, we delete those channels (along
+        with deleting the asset itself) so the next run starts clean
+        rather than tripping over orphaned channels still pointing at
+        the deleted asset's id.
+        """
+        url = f"{self.api_host}/timeseries/{package_id}/channels/{channel_id}"
+        headers = {
+            "Content-type": "application/json",
+            "Authorization": f"Bearer {self.session_manager.session_token}",
+        }
+
+        try:
+            response = requests.delete(url, headers=headers)
+            response.raise_for_status()
+        except requests.HTTPError as e:
+            log.error(
+                "failed to delete channel %s on package %s: %s",
+                channel_id,
+                package_id,
+                e,
+            )
+            raise
+
+    @BaseClient.retry_with_refresh
     def get_package_channels(self, package_id):
         url = f"{self.api_host}/timeseries/{package_id}/channels"
 

@@ -5,13 +5,23 @@ import requests
 log = logging.getLogger()
 
 
-def _is_client_error(exc: requests.HTTPError) -> bool:
-    """Tells the backoff library not to retry on 4xx responses.
+# (connect_timeout_seconds, read_timeout_seconds). Per-request override is
+# allowed but every HTTP call must pass *some* timeout — never block
+# indefinitely on a stuck service.
+DEFAULT_TIMEOUT = (5, 30)
 
-    4xx means the request itself is wrong; retrying won't help. 5xx
-    (and connection-level errors) are likely transient — retry those.
+
+def _is_client_error(exc: requests.RequestException) -> bool:
+    """Tells the backoff library when to give up.
+
+    Give up on 4xx HTTP responses (the request itself is wrong; a retry
+    won't change the answer). Keep retrying everything else: 5xx, plus
+    connection-level errors with no response at all (timeouts, refused
+    connections, DNS failures).
     """
-    return exc.response is not None and 400 <= exc.response.status_code < 500
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        return 400 <= exc.response.status_code < 500
+    return False
 
 
 # encapsulates a shared API session and token refresh
