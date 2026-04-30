@@ -98,7 +98,7 @@ def import_timeseries_via_assets(
        naming convention).
     5. Upload chunks to S3 using the asset's STS credentials.
     6. Register ranges via timeseries-service.
-    7. Mark the asset 'active'.
+    7. Mark the asset 'ready'.
     8. On any failure, delete the asset (cleanup-queue lambda purges S3).
     """
     timeseries_data_files, timeseries_channel_files = _collect_timeseries_files(file_directory)
@@ -138,21 +138,16 @@ def import_timeseries_via_assets(
         asset_type=asset_type,
     )
 
-    # upload_credentials is None when an already-active asset was found;
+    # upload_credentials is None when an already-ready asset was found;
     # treat as a successful no-op so workflow re-runs are idempotent.
     if upload_credentials is None:
         return asset.id
 
-    # Channels we create during this ingest (not reused from a prior run).
-    # Tracked so the cleanup path can delete them if anything downstream
-    # fails — otherwise they outlive the asset and break the next re-run.
     created_channel_node_ids: list[str] = []
     timeseries_client = TimeSeriesClient(api_host, session_manager)
 
     try:
-        # Channels: create with viewer_asset_id set so timeseries-service
-        # accepts the range registration. Reuse existing channels if name/
-        # type/rate match.
+
         existing_channels = timeseries_client.get_package_channels(target_package_id)
 
         channels_by_index, created_channel_node_ids = _create_or_resolve_channels(
@@ -164,7 +159,7 @@ def import_timeseries_via_assets(
         )
         if not channels_by_index:
             raise RuntimeError(
-                "no channels were resolved from staged metadata files; refusing to mark asset active with empty data"
+                "no channels were resolved from staged metadata files; refusing to mark asset ready with empty data"
             )
 
         # Rename data files to use channel node ids in their basenames
@@ -173,7 +168,7 @@ def import_timeseries_via_assets(
         renamed_data_files = _rename_data_files_to_node_ids(timeseries_data_files, channels_by_index)
         if not renamed_data_files:
             raise RuntimeError(
-                "no chunk files were resolved from the output directory; refusing to mark asset active with empty data"
+                "no chunk files were resolved from the output directory; refusing to mark asset ready with empty data"
             )
 
         # Upload to S3 using the STS creds returned by create_asset.
@@ -195,31 +190,19 @@ def import_timeseries_via_assets(
             result.skipped,
         )
 
-        # Flip status to active. This MUST succeed — status='active' is
-        # what makes re-runs idempotent. Swallowing it would leave the
-        # asset in 'created', and the next run would treat it as stale,
-        # delete + recreate, and lose the channel-asset link. Let any
-        # failure propagate so the cleanup path runs and the next attempt
-        # starts fresh.
-        assets_client.update_asset(asset.id, dataset_id=workflow_instance.dataset_id, status="active")
+        # status='ready' gates re-run idempotency; let failures propagate
+        # so cleanup runs and the next attempt starts fresh.
+        assets_client.update_asset(asset.id, dataset_id=workflow_instance.dataset_id, status="ready")
 
     except Exception as e:
         log.error("asset-flow ingest failed for asset %s: %s", asset.id, e)
-        # Delete channels we created BEFORE deleting the asset.
-        # channels.viewer_asset_id has no FK to viewer_assets — deleting
-        # the asset alone would orphan our newly-created channels with a
-        # dangling viewer_asset_id, and the next run's
-        # _create_or_resolve_channels would raise on the mismatch instead
-        # of a clean restart. Reused channels (not in the created list)
-        # are left untouched.
+        # Delete channels before the asset: viewer_asset_id has no FK, so
+        # the asset delete alone would orphan them and break the next run.
         for channel_node_id in created_channel_node_ids:
             try:
                 timeseries_client.delete_channel(target_package_id, channel_node_id)
                 log.info("deleted channel %s during cleanup", channel_node_id)
             except Exception as channel_cleanup_err:
-                # Best-effort; keep going so the asset still gets cleaned
-                # up. A leftover channel is recoverable in code; a
-                # leftover asset row + S3 prefix is worse.
                 log.error(
                     "failed to delete channel %s during cleanup: %s",
                     channel_node_id,
@@ -248,34 +231,18 @@ def _find_or_create_asset(
     asset_name: str,
     asset_type: str,
 ):
-    """Look up an existing asset for this workflow; create one if absent.
+    """Find an existing asset for this workflow or create a new one.
 
-    Lookup must use the same package set we link at creation time
-    (workflow.package_ids). The aggregating "target package" walked to
-    by determine_target_package — the parent collection in multi-package
-    workflows — is *not* in viewer_asset_packages, so looking up by it
-    would always return empty and we'd create duplicate assets on
-    re-runs.
-
-    Iterates the workflow packages and returns the first asset whose
-    name + asset_type matches.
-
-    Status-aware behavior:
-      - Existing asset with status='active' → return (asset, None).
-        upload_credentials being None signals "skip ingest, this asset is
-        already done." Caller short-circuits.
-      - Existing asset in any other state → assumed to be from a failed
-        prior run. Delete it (triggers S3 cleanup queue) and create a
-        fresh one.
-      - No existing asset → create.
-
-    Returns (asset, upload_credentials | None).
+    Returns (asset, upload_credentials). upload_credentials is None when
+    a ready asset already exists (caller skips ingest); otherwise the
+    asset was just created and the creds are usable for upload.
+    Non-ready existing assets are deleted and recreated.
     """
     match = _find_asset_by_workflow_packages(assets_client, dataset_id, package_ids, asset_name, asset_type)
 
-    if match is not None and match.status == "active":
+    if match is not None and match.status == "ready":
         log.info(
-            "asset %s already active for workflow packages %s; idempotent re-run, skipping ingest",
+            "asset %s already ready for workflow packages %s; idempotent re-run, skipping ingest",
             match.id,
             package_ids,
         )
@@ -335,19 +302,14 @@ def _create_or_resolve_channels(
     existing_channels: list[TimeSeriesChannel],
     viewer_asset_id: str,
 ) -> tuple[dict[str, TimeSeriesChannel], list[str]]:
-    """For each channel metadata file, return a TimeSeriesChannel keyed by index.
+    """Resolve a TimeSeriesChannel for each channel metadata file.
 
-    Reuses an existing channel when name/type/rate match, otherwise
-    creates a new one with viewer_asset_id set. Mutates the returned
-    channels' .index field so callers can map channel filenames to
-    channel objects by index.
+    Reuses an existing channel when name/type/rate match; otherwise
+    creates one with viewer_asset_id set.
 
-    Returns:
-        (channels_by_index, created_channel_node_ids)
-        - channels_by_index: dict {channel-index → TimeSeriesChannel}
-        - created_channel_node_ids: list of node ids the *current* ingest
-          created (i.e. did not reuse). The caller must delete these on
-          ingest failure so that orphan channels don't outlive the asset.
+    Returns (channels_by_index, created_channel_node_ids). The second
+    list holds only node ids created by this run, so failure cleanup
+    can delete them without touching reused channels.
     """
     channels: dict[str, TimeSeriesChannel] = {}
     created_channel_node_ids: list[str] = []
@@ -439,8 +401,7 @@ def _build_range_chunks(
     chunks: list[RangeChunk] = []
     for upload in uploads:
         basename = upload.relative_key
-        # Match either node-id-prefixed or index-prefixed names; we expect
-        # the former post-rename, but the timestamp pattern works for both.
+        # Basenames are node-id-prefixed at this point (post-rename).
         ts_match = _CHUNK_TIMESTAMP_PATTERN.search(basename)
         if ts_match is None:
             raise ValueError(f"chunk filename does not contain start/end timestamps: {basename}")
