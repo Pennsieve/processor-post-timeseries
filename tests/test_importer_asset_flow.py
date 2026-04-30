@@ -133,7 +133,7 @@ def all_responses():
     rsps.reset()
 
 
-def _wire_happy_path(rsps, *, list_assets_returns=None, asset_status_after_patch="active"):
+def _wire_happy_path(rsps, *, list_assets_returns=None, asset_status_after_patch="ready"):
     """Register all happy-path responses against the given RequestsMock."""
     # WorkflowClient
     rsps.add(
@@ -242,8 +242,8 @@ class TestHappyPath:
 
 class TestIdempotentSkip:
     @patch("asset_uploader.boto3.client")
-    def test_active_asset_short_circuits(self, mock_boto, session_manager, staged_files):
-        """When list_assets returns an existing 'active' asset, the function
+    def test_ready_asset_short_circuits(self, mock_boto, session_manager, staged_files):
+        """When list_assets returns an existing 'ready' asset, the function
         returns its id without uploading or registering ranges."""
         rsps = responses.RequestsMock()
         rsps.start()
@@ -262,7 +262,7 @@ class TestIdempotentSkip:
                 status=200,
             )
 
-            # List assets returns one already-active asset matching name+type
+            # List assets returns one already-ready asset matching name+type
             rsps.add(
                 responses.GET,
                 f"{API_HOST2}/packages/assets",
@@ -275,7 +275,7 @@ class TestIdempotentSkip:
                             "asset_type": "timeseries",
                             "asset_url": "",
                             "properties": {},
-                            "status": "active",
+                            "status": "ready",
                             "package_ids": [PACKAGE_NODE_ID],
                             "created_at": "2026-04-30T12:00:00Z",
                         }
@@ -520,7 +520,7 @@ class TestMultiPackageIdempotency:
     """
 
     @patch("asset_uploader.boto3.client")
-    def test_active_asset_found_via_second_child_package(self, mock_boto, session_manager, staged_files):
+    def test_ready_asset_found_via_second_child_package(self, mock_boto, session_manager, staged_files):
         # Workflow has 3 children; the existing asset is linked to all of
         # them, but list_assets_for_package only returns it for ones
         # actually in viewer_asset_packages.
@@ -570,7 +570,7 @@ class TestMultiPackageIdempotency:
                 json={"assets": []},
                 status=200,
             )
-            # Lookup by second child returns the active asset
+            # Lookup by second child returns the ready asset
             rsps.add(
                 responses.GET,
                 f"{API_HOST2}/packages/assets",
@@ -584,7 +584,7 @@ class TestMultiPackageIdempotency:
                             "asset_type": "timeseries",
                             "asset_url": "",
                             "properties": {},
-                            "status": "active",
+                            "status": "ready",
                             "package_ids": [child_a, child_b, child_c],
                             "created_at": "2026-04-30T12:00:00Z",
                         }
