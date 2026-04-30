@@ -2,6 +2,9 @@
 data
 sample_data
 
+# local environment overrides — see dev.env.example for the schema
+dev.env
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
