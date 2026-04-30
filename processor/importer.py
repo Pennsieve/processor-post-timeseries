@@ -131,7 +131,6 @@ def import_timeseries_via_assets(
         assets_client,
         dataset_id=workflow_instance.dataset_id,
         package_ids=workflow_instance.package_ids,
-        target_package_id=target_package_id,
         asset_name=asset_name,
         asset_type=asset_type,
     )
@@ -216,11 +215,20 @@ def _find_or_create_asset(
     assets_client: PackagesAssetsClient,
     dataset_id: str,
     package_ids: list[str],
-    target_package_id: str,
     asset_name: str,
     asset_type: str,
 ):
-    """Look up an existing asset for this package; create one if absent.
+    """Look up an existing asset for this workflow; create one if absent.
+
+    Lookup must use the same package set we link at creation time
+    (workflow.package_ids). The aggregating "target package" walked to
+    by determine_target_package — the parent collection in multi-package
+    workflows — is *not* in viewer_asset_packages, so looking up by it
+    would always return empty and we'd create duplicate assets on
+    re-runs.
+
+    Iterates the workflow packages and returns the first asset whose
+    name + asset_type matches.
 
     Status-aware behavior:
       - Existing asset with status='active' → return (asset, None).
@@ -233,31 +241,26 @@ def _find_or_create_asset(
 
     Returns (asset, upload_credentials | None).
     """
-    existing = assets_client.list_assets_for_package(dataset_id, target_package_id)
-    match = next(
-        (
-            a
-            for a in existing
-            if a.name == asset_name and a.asset_type == asset_type
-        ),
-        None,
+    match = _find_asset_by_workflow_packages(
+        assets_client, dataset_id, package_ids, asset_name, asset_type
     )
 
     if match is not None and match.status == "active":
         log.info(
-            "asset %s already active for package %s; idempotent re-run, skipping ingest",
+            "asset %s already active for workflow packages %s; idempotent re-run, "
+            "skipping ingest",
             match.id,
-            target_package_id,
+            package_ids,
         )
         return match, None
 
     if match is not None:
         log.info(
-            "asset %s in status %r for package %s; assuming prior run failed, "
-            "deleting and recreating",
+            "asset %s in status %r for workflow packages %s; assuming prior run "
+            "failed, deleting and recreating",
             match.id,
             match.status,
-            target_package_id,
+            package_ids,
         )
         assets_client.delete_asset(match.id, dataset_id)
 
@@ -275,6 +278,32 @@ def _find_or_create_asset(
         asset_type=asset_type,
     )
     return created.asset, created.upload_credentials
+
+
+def _find_asset_by_workflow_packages(
+    assets_client: PackagesAssetsClient,
+    dataset_id: str,
+    package_ids: list[str],
+    asset_name: str,
+    asset_type: str,
+):
+    """Search each workflow package for an asset matching name+type.
+
+    Stops on first hit. Returns None if no package surfaces a match.
+    """
+    for package_id in package_ids:
+        existing = assets_client.list_assets_for_package(dataset_id, package_id)
+        match = next(
+            (
+                asset
+                for asset in existing
+                if asset.name == asset_name and asset.asset_type == asset_type
+            ),
+            None,
+        )
+        if match is not None:
+            return match
+    return None
 
 
 def _create_or_resolve_channels(
