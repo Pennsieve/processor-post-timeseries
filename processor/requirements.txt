@@ -1,5 +1,8 @@
-numpy
-pynwb
-requests
-boto3
-backoff
+numpy==2.2.6
+pynwb==3.1.3
+# hdmf is a transitive dep of pynwb; pin it explicitly since it drives
+# NWB read/write behavior and previously floated to a breaking version
+hdmf==4.3.1
+requests==2.34.2
+boto3==1.43.50
+backoff==2.2.1
