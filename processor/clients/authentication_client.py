@@ -111,6 +111,26 @@ class CognitoClient:
         return response["AuthenticationResult"]["AccessToken"]
 
 
+def resolve_auth_provider(api_host, api_key, api_secret, session_token, refresh_token) -> AuthProvider:
+    """Choose an auth strategy from the available credentials.
+
+    API key/secret wins over the injected session token. The orchestrator mints
+    SESSION_TOKEN once when the run starts and never refreshes it, so a late
+    stage routinely receives one that is already past its ~60 minute life. Only
+    key/secret can mint a fresh token on demand, which a multi-hour ingest needs.
+
+    Falls back to the session token so runs on compute nodes without the API-key
+    secrets configured keep working unchanged.
+    """
+    if api_key and api_secret:
+        return KeySecretAuthProvider(api_host, api_key, api_secret)
+    if session_token:
+        return TokenAuthProvider(api_host, session_token, refresh_token)
+    raise RuntimeError(
+        "no authentication credentials provided: set PENNSIEVE_API_KEY/PENNSIEVE_API_SECRET or SESSION_TOKEN"
+    )
+
+
 class TokenAuthProvider(AuthProvider):
     """Auth provider for pre-supplied session + refresh tokens (production path)."""
 
@@ -131,7 +151,7 @@ class TokenAuthProvider(AuthProvider):
 
 
 class KeySecretAuthProvider(AuthProvider):
-    """Auth provider that authenticates with API key/secret (local development path).
+    """Auth provider that authenticates with API key/secret (preferred path).
 
     Authenticates eagerly on construction to obtain session + refresh tokens,
     then refreshes using the same Cognito refresh flow as TokenAuthProvider.
@@ -151,10 +171,15 @@ class KeySecretAuthProvider(AuthProvider):
     def refresh(self) -> str:
         if self._refresh_token:
             log.info("refreshing session token using refresh token")
-            self._session_token = self._cognito.refresh_token(self._refresh_token, self._session_token)
-        else:
-            log.info("no refresh token, re-authenticating with API key/secret")
-            self._session_token, self._refresh_token = self._cognito.authenticate(
-                self._api_key, self._api_secret
-            )
+            try:
+                self._session_token = self._cognito.refresh_token(self._refresh_token, self._session_token)
+                return self._session_token
+            except Exception as e:
+                log.warning(f"refresh token failed ({e}); re-authenticating with API key/secret")
+                self._refresh_token = None
+
+        log.info("re-authenticating with API key/secret")
+        self._session_token, self._refresh_token = self._cognito.authenticate(
+            self._api_key, self._api_secret
+        )
         return self._session_token

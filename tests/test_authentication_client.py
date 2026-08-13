@@ -8,6 +8,7 @@ from clients.authentication_client import (
     CognitoClient,
     KeySecretAuthProvider,
     TokenAuthProvider,
+    resolve_auth_provider,
 )
 
 
@@ -306,6 +307,27 @@ class TestKeySecretAuthProvider:
         assert provider.get_session_token() == "refreshed-token"
         mock_cognito.refresh_token.assert_called_once_with("my-refresh-token", "old-token")
 
+    def test_refresh_falls_back_to_key_secret_when_refresh_fails(self):
+        """A revoked/expired refresh token must not fail the ingest — we still hold key/secret."""
+        mock_cognito = Mock()
+        mock_cognito.refresh_token.side_effect = Exception("NotAuthorizedException: Refresh Token has expired")
+        mock_cognito.authenticate.return_value = ("reauth-access", "reauth-refresh")
+
+        provider = KeySecretAuthProvider.__new__(KeySecretAuthProvider)
+        provider._api_key = "key"
+        provider._api_secret = "secret"
+        provider._session_token = "old-token"
+        provider._refresh_token = "expired-refresh-token"
+        provider._cognito = mock_cognito
+
+        result = provider.refresh()
+
+        assert result == "reauth-access"
+        assert provider.get_session_token() == "reauth-access"
+        assert provider._refresh_token == "reauth-refresh"
+        mock_cognito.refresh_token.assert_called_once_with("expired-refresh-token", "old-token")
+        mock_cognito.authenticate.assert_called_once_with("key", "secret")
+
     def test_refresh_re_authenticates_when_no_refresh_token(self):
         mock_cognito = Mock()
         mock_cognito.authenticate.return_value = ("new-access", "new-refresh")
@@ -322,3 +344,38 @@ class TestKeySecretAuthProvider:
         assert result == "new-access"
         assert provider._refresh_token == "new-refresh"
         mock_cognito.authenticate.assert_called_once_with("key", "secret")
+
+
+class TestResolveAuthProvider:
+    """Tests for credential precedence: key/secret must beat the injected session token."""
+
+    def test_prefers_key_secret_over_session_token(self):
+        """The regression this change fixes: SESSION_TOKEN is always injected by the
+        orchestrator, so presence-based selection made the API key unreachable."""
+        with patch("clients.authentication_client.KeySecretAuthProvider") as mock_key_secret:
+            provider = resolve_auth_provider(
+                "https://api.test.com", "my-key", "my-secret", "injected-session-token", "injected-refresh"
+            )
+
+        mock_key_secret.assert_called_once_with("https://api.test.com", "my-key", "my-secret")
+        assert provider is mock_key_secret.return_value
+
+    def test_falls_back_to_session_token_without_key_secret(self):
+        with patch("clients.authentication_client.TokenAuthProvider") as mock_token:
+            provider = resolve_auth_provider(
+                "https://api.test.com", None, None, "session-token", "refresh-token"
+            )
+
+        mock_token.assert_called_once_with("https://api.test.com", "session-token", "refresh-token")
+        assert provider is mock_token.return_value
+
+    def test_partial_key_secret_falls_back_to_session_token(self):
+        """A key without its secret is unusable — don't strand the run on it."""
+        with patch("clients.authentication_client.TokenAuthProvider") as mock_token:
+            resolve_auth_provider("https://api.test.com", "my-key", None, "session-token", None)
+
+        mock_token.assert_called_once_with("https://api.test.com", "session-token", None)
+
+    def test_raises_without_any_credentials(self):
+        with pytest.raises(RuntimeError, match="no authentication credentials provided"):
+            resolve_auth_provider("https://api.test.com", None, None, None, None)
