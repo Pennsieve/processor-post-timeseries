@@ -48,13 +48,7 @@ if __name__ == "__main__":
         from clients.authentication_client import resolve_auth_provider
         from clients.base_client import SessionManager
 
-        auth_provider = resolve_auth_provider(
-            config.API_HOST,
-            config.API_KEY,
-            config.API_SECRET,
-            config.SESSION_TOKEN,
-            config.REFRESH_TOKEN,
-        )
+        auth_provider = resolve_auth_provider(config.API_HOST, config.API_KEY, config.API_SECRET)
 
         session_manager = SessionManager(auth_provider)
 

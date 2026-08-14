@@ -111,50 +111,27 @@ class CognitoClient:
         return response["AuthenticationResult"]["AccessToken"]
 
 
-def resolve_auth_provider(api_host, api_key, api_secret, session_token, refresh_token) -> AuthProvider:
-    """Choose an auth strategy from the available credentials.
+def resolve_auth_provider(api_host, api_key, api_secret) -> AuthProvider:
+    """Build the auth provider from the configured API key/secret.
 
-    API key/secret wins over the injected session token. The orchestrator mints
-    SESSION_TOKEN once when the run starts and never refreshes it, so a late
-    stage routinely receives one that is already past its ~60 minute life. Only
-    key/secret can mint a fresh token on demand, which a multi-hour ingest needs.
-
-    Falls back to the session token so runs on compute nodes without the API-key
-    secrets configured keep working unchanged.
+    An injected session token is not accepted. The orchestrator mints one when
+    the run starts and never refreshes it, so a late stage routinely receives a
+    token already past its ~60 minute life. Only key/secret can mint a fresh
+    token on demand, which a multi-hour ingest needs.
     """
-    if api_key and api_secret:
-        return KeySecretAuthProvider(api_host, api_key, api_secret)
-    if session_token:
-        return TokenAuthProvider(api_host, session_token, refresh_token)
-    raise RuntimeError(
-        "no authentication credentials provided: set PENNSIEVE_API_KEY/PENNSIEVE_API_SECRET or SESSION_TOKEN"
-    )
-
-
-class TokenAuthProvider(AuthProvider):
-    """Auth provider for pre-supplied session + refresh tokens (production path)."""
-
-    def __init__(self, api_host, session_token, refresh_token):
-        self._session_token = session_token
-        self._refresh_token = refresh_token
-        self._cognito = CognitoClient(api_host)
-
-    def get_session_token(self) -> str:
-        return self._session_token
-
-    def refresh(self) -> str:
-        if not self._refresh_token:
-            raise RuntimeError("cannot refresh session: no refresh token available")
-        log.info("refreshing session token using refresh token")
-        self._session_token = self._cognito.refresh_token(self._refresh_token, self._session_token)
-        return self._session_token
+    if not (api_key and api_secret):
+        raise RuntimeError(
+            "no authentication credentials provided: set PENNSIEVE_API_KEY and PENNSIEVE_API_SECRET"
+        )
+    return KeySecretAuthProvider(api_host, api_key, api_secret)
 
 
 class KeySecretAuthProvider(AuthProvider):
-    """Auth provider that authenticates with API key/secret (preferred path).
+    """Auth provider that authenticates with API key/secret.
 
     Authenticates eagerly on construction to obtain session + refresh tokens,
-    then refreshes using the same Cognito refresh flow as TokenAuthProvider.
+    then refreshes via the Cognito refresh flow, re-authenticating from
+    key/secret if the refresh token is rejected.
     """
 
     def __init__(self, api_host, api_key, api_secret):

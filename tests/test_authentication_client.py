@@ -7,7 +7,6 @@ import responses
 from clients.authentication_client import (
     CognitoClient,
     KeySecretAuthProvider,
-    TokenAuthProvider,
     resolve_auth_provider,
 )
 
@@ -229,44 +228,8 @@ class TestCognitoClient:
         assert len(responses.calls) == 1
 
 
-class TestTokenAuthProvider:
-    """Tests for TokenAuthProvider (production path: pre-supplied tokens)."""
-
-    def test_get_session_token(self):
-        provider = TokenAuthProvider.__new__(TokenAuthProvider)
-        provider._session_token = "my-session-token"
-        provider._refresh_token = "my-refresh-token"
-        provider._cognito = Mock()
-
-        assert provider.get_session_token() == "my-session-token"
-
-    def test_refresh_updates_session_token(self):
-        mock_cognito = Mock()
-        mock_cognito.refresh_token.return_value = "new-access-token"
-
-        provider = TokenAuthProvider.__new__(TokenAuthProvider)
-        provider._session_token = "old-token"
-        provider._refresh_token = "my-refresh-token"
-        provider._cognito = mock_cognito
-
-        result = provider.refresh()
-
-        assert result == "new-access-token"
-        assert provider.get_session_token() == "new-access-token"
-        mock_cognito.refresh_token.assert_called_once_with("my-refresh-token", "old-token")
-
-    def test_refresh_raises_without_refresh_token(self):
-        provider = TokenAuthProvider.__new__(TokenAuthProvider)
-        provider._session_token = "session-token"
-        provider._refresh_token = None
-        provider._cognito = Mock()
-
-        with pytest.raises(RuntimeError, match="no refresh token"):
-            provider.refresh()
-
-
 class TestKeySecretAuthProvider:
-    """Tests for KeySecretAuthProvider (local dev path: key/secret → tokens)."""
+    """Tests for KeySecretAuthProvider (the only supported auth path)."""
 
     @responses.activate
     def test_authenticates_eagerly_on_init(self):
@@ -347,35 +310,21 @@ class TestKeySecretAuthProvider:
 
 
 class TestResolveAuthProvider:
-    """Tests for credential precedence: key/secret must beat the injected session token."""
+    """API key/secret is the only accepted credential — no session-token fallback."""
 
-    def test_prefers_key_secret_over_session_token(self):
-        """The regression this change fixes: SESSION_TOKEN is always injected by the
-        orchestrator, so presence-based selection made the API key unreachable."""
+    def test_builds_key_secret_provider(self):
         with patch("clients.authentication_client.KeySecretAuthProvider") as mock_key_secret:
-            provider = resolve_auth_provider(
-                "https://api.test.com", "my-key", "my-secret", "injected-session-token", "injected-refresh"
-            )
+            provider = resolve_auth_provider("https://api.test.com", "my-key", "my-secret")
 
         mock_key_secret.assert_called_once_with("https://api.test.com", "my-key", "my-secret")
         assert provider is mock_key_secret.return_value
 
-    def test_falls_back_to_session_token_without_key_secret(self):
-        with patch("clients.authentication_client.TokenAuthProvider") as mock_token:
-            provider = resolve_auth_provider(
-                "https://api.test.com", None, None, "session-token", "refresh-token"
-            )
-
-        mock_token.assert_called_once_with("https://api.test.com", "session-token", "refresh-token")
-        assert provider is mock_token.return_value
-
-    def test_partial_key_secret_falls_back_to_session_token(self):
-        """A key without its secret is unusable — don't strand the run on it."""
-        with patch("clients.authentication_client.TokenAuthProvider") as mock_token:
-            resolve_auth_provider("https://api.test.com", "my-key", None, "session-token", None)
-
-        mock_token.assert_called_once_with("https://api.test.com", "session-token", None)
-
-    def test_raises_without_any_credentials(self):
+    @pytest.mark.parametrize(
+        "api_key,api_secret",
+        [(None, None), ("my-key", None), (None, "my-secret")],
+        ids=["neither", "key-without-secret", "secret-without-key"],
+    )
+    def test_raises_without_complete_key_secret(self, api_key, api_secret):
+        """A partial credential is unusable, and there is nothing left to fall back to."""
         with pytest.raises(RuntimeError, match="no authentication credentials provided"):
-            resolve_auth_provider("https://api.test.com", None, None, None, None)
+            resolve_auth_provider("https://api.test.com", api_key, api_secret)
