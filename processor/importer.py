@@ -31,6 +31,12 @@ for import into Pennsieve data ecosystem.
 # easily able to handle > 3 processors
 """
 
+# Log one progress line per this many uploads rather than one per file.
+# A full run uploads ~210k chunks, and the workflow finalizer loads every
+# log event of every task into memory to archive it to S3 — a line per
+# file was enough to OOM that Lambda before it could finish.
+UPLOAD_LOG_INTERVAL = 100
+
 
 def import_timeseries(
     api_host, api2_host, session_manager, workflow_instance_id, file_directory
@@ -123,8 +129,10 @@ def import_timeseries(
         try:
             with upload_counter_lock:
                 upload_counter.value += 1
+                uploaded = upload_counter.value
+            if uploaded % UPLOAD_LOG_INTERVAL == 0 or uploaded == len(import_files):
                 log.info(
-                    f"import_id={import_id} upload_key={timeseries_file.upload_key} uploading {upload_counter.value}/{len(import_files)} {timeseries_file.local_path}"
+                    f"import_id={import_id} uploading {uploaded}/{len(import_files)}"
                 )
             upload_url = import_client.get_presign_url(
                 import_id, workflow_instance.dataset_id, timeseries_file.upload_key
