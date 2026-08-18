@@ -79,6 +79,102 @@ class TestCognitoClient:
         )
 
     @responses.activate
+    def test_authenticate_uses_token_pool_not_user_pool(self):
+        """API key/secret are token-pool users, so the token pool's client must be used.
+
+        Regression test. Authenticating an API key against the user pool's
+        client fails as NotAuthorizedException "Incorrect username or
+        password" — that username only exists in the token pool. The bug
+        was invisible for months because the production path used
+        SESSION_TOKEN (a genuine user-pool token) and only local dev
+        exercised key/secret. Every other test here mocks a config with no
+        tokenPool at all, so none of them can catch it.
+        """
+        responses.add(
+            responses.GET,
+            "https://api.test.com/authentication/cognito-config",
+            json={
+                "region": "us-east-1",
+                "userPool": {"appClientId": "user-pool-client"},
+                "tokenPool": {"appClientId": "token-pool-client"},
+            },
+            status=200,
+        )
+
+        mock_cognito_client = Mock()
+        mock_cognito_client.initiate_auth.return_value = {
+            "AuthenticationResult": {"AccessToken": "token", "RefreshToken": "refresh"}
+        }
+
+        with patch("clients.authentication_client.boto3.client", return_value=mock_cognito_client):
+            client = CognitoClient("https://api.test.com")
+            client.authenticate("my-api-key", "my-api-secret")
+
+        _, kwargs = mock_cognito_client.initiate_auth.call_args
+        assert kwargs["ClientId"] == "token-pool-client"
+
+    @responses.activate
+    def test_refresh_token_uses_token_pool_not_user_pool(self):
+        """Refresh must target the same pool that minted the token."""
+        responses.add(
+            responses.GET,
+            "https://api.test.com/authentication/cognito-config",
+            json={
+                "region": "us-east-1",
+                "userPool": {"appClientId": "user-pool-client"},
+                "tokenPool": {"appClientId": "token-pool-client"},
+            },
+            status=200,
+        )
+
+        mock_cognito_client = Mock()
+        mock_cognito_client.initiate_auth.return_value = {
+            "AuthenticationResult": {"AccessToken": "new-token"}
+        }
+
+        with patch("clients.authentication_client.boto3.client", return_value=mock_cognito_client):
+            client = CognitoClient("https://api.test.com")
+            client.refresh_token("some-refresh-token")
+
+        _, kwargs = mock_cognito_client.initiate_auth.call_args
+        assert kwargs["ClientId"] == "token-pool-client"
+
+    @responses.activate
+    def test_falls_back_to_user_pool_when_token_pool_absent(self):
+        """Deployments that publish no tokenPool must still resolve a client."""
+        responses.add(
+            responses.GET,
+            "https://api.test.com/authentication/cognito-config",
+            json={"userPool": {"appClientId": "user-pool-client"}, "region": "us-east-1"},
+            status=200,
+        )
+
+        client = CognitoClient("https://api.test.com")
+        assert client._get_cognito_config()["app_client_id"] == "user-pool-client"
+
+    @responses.activate
+    def test_falls_back_to_user_pool_when_token_pool_client_empty(self):
+        """An empty appClientId is 'not configured', not a usable client id.
+
+        The identityPool in the real prod response carries exactly this
+        shape ("appClientId": ""), so treating presence-of-key as
+        presence-of-value would hand Cognito an empty ClientId.
+        """
+        responses.add(
+            responses.GET,
+            "https://api.test.com/authentication/cognito-config",
+            json={
+                "region": "us-east-1",
+                "userPool": {"appClientId": "user-pool-client"},
+                "tokenPool": {"appClientId": ""},
+            },
+            status=200,
+        )
+
+        client = CognitoClient("https://api.test.com")
+        assert client._get_cognito_config()["app_client_id"] == "user-pool-client"
+
+    @responses.activate
     def test_authenticate_raises_on_config_http_error(self):
         responses.add(
             responses.GET,
