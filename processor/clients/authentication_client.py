@@ -43,8 +43,14 @@ class CognitoClient:
         response.raise_for_status()
         data = json.loads(response.content)
 
+        # API key/secret pairs are users of the *token* pool, not the user
+        # pool. The user pool holds human logins (email + password); an API
+        # token authenticated against it fails as "Incorrect username or
+        # password", because that username genuinely does not exist there.
+        # Fall back to userPool only if a deployment omits tokenPool.
+        pool = "tokenPool" if data.get("tokenPool", {}).get("appClientId") else "userPool"
         self._cognito_config = {
-            "app_client_id": data["userPool"]["appClientId"],
+            "app_client_id": data[pool]["appClientId"],
             "region": data["region"],
         }
         return self._cognito_config
