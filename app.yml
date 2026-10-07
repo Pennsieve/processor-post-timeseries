@@ -1,0 +1,38 @@
+schemaVersion: '1.0'
+application:
+  name: processor-post-timeseries
+  description: Convert NWB electrical series into chunked timeseries data and optionally upload it to Pennsieve
+  type: processor
+runtime:
+  cpu: 4096
+  memory: 12288
+  computeTypes:
+    - standard
+parameters:
+  - name: CHUNK_SIZE_MB
+    type: number
+    required: false
+    description: Uncompressed chunk size per channel in MiB (1048576 bytes). Must be a positive whole number
+    defaultValue: '1'
+    min: 1
+  - name: IMPORTER_ENABLED
+    type: boolean
+    required: false
+    description: Upload generated timeseries to Pennsieve. Requires runtime API credentials and the current workflow ID in INTEGRATION_ID
+    defaultValue: 'true'
+# INPUT_DIR, OUTPUT_DIR, ENVIRONMENT, and API hosts come from the runner.
+# When importing, also supply PENNSIEVE_API_KEY, PENNSIEVE_API_SECRET, and
+# INTEGRATION_ID at runtime. Keep credentials out of manifest parameters.
+inputs:
+  - name: NWB Timeseries
+    # Keep this type aligned with the processor-persyst-nwb output.
+    dataType: application/octet-stream
+    required: true
+    description: Exactly one .nwb file containing raw ElectricalSeries acquisitions in INPUT_DIR
+outputs:
+  - name: Timeseries Chunks
+    dataType: application/gzip
+    description: Per-channel .bin.gz files containing big-endian float64 samples
+  - name: Channel Metadata
+    dataType: application/json
+    description: Per-channel .metadata.json files describing the timeseries channels
