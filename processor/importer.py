@@ -193,6 +193,10 @@ def determine_target_package(packages_client: PackagesClient, package_ids: list[
         log.warning("No package ID with 'N:package:' prefix found in: %s", package_ids)
         return None
 
+    header_package = find_header_package(packages_client, package_ids)
+    if header_package is not None:
+        return header_package
+
     log.info("Multiple package IDs found, getting parent of first package: %s", first_package)
     try:
         parent_id = packages_client.get_parent_package_id(first_package)
@@ -201,3 +205,41 @@ def determine_target_package(packages_client: PackagesClient, package_ids: list[
     except Exception as e:
         log.error("Failed to get parent package ID: %s", e)
         return None
+
+
+HEADER_PACKAGE_SUFFIXES = (".lay",)
+"""File suffixes that mark the package which should carry the time series.
+
+A Persyst recording arrives as a .lay header plus a .dat sample file. Pennsieve
+already types the .lay package as a Timeseries, and the viewer only opens a
+file package, never the folder that holds the pair. So when a workflow has
+several input packages, the one named like a header is the right target.
+"""
+
+
+def find_header_package(packages_client: PackagesClient, package_ids: list[str]) -> Optional[str]:
+    """
+    Return the single input package whose name ends with a header suffix, or None.
+
+    None is also returned when no package matches, when several match, or when a
+    name lookup fails, so the caller can fall back to the parent folder.
+    """
+    matches = []
+    for package_id in package_ids:
+        if not package_id.startswith("N:package:"):
+            continue
+        try:
+            name = packages_client.get_package_name(package_id)
+        except Exception as e:
+            log.warning("Could not look up name of package %s: %s", package_id, e)
+            return None
+        if name.lower().endswith(HEADER_PACKAGE_SUFFIXES):
+            matches.append((package_id, name))
+
+    if len(matches) == 1:
+        package_id, name = matches[0]
+        log.info("Multiple package IDs found, using header package %s (%s)", package_id, name)
+        return package_id
+    if len(matches) > 1:
+        log.warning("Multiple header packages found, falling back to parent folder: %s", matches)
+    return None

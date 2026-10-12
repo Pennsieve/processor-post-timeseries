@@ -52,6 +52,29 @@ class PackagesClient(BaseClient):
             raise e
 
     @BaseClient.retry_with_refresh
+    def get_package_name(self, package_id: str) -> str:
+        """
+        Get the display name of a package.
+
+        Args:
+            package_id: The package ID to query
+
+        Returns:
+            str: The package name, e.g. "recording.lay"
+
+        Raises:
+            requests.HTTPError: If the API request fails
+        """
+        url = f"{self.api_host}/packages/{package_id}"
+        headers = {
+            "accept": "application/json",
+            "Authorization": f"Bearer {self.session_manager.session_token}",
+        }
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()["content"]["name"]
+
+    @BaseClient.retry_with_refresh
     def update_properties(self, package_id: str, properties: list[dict]) -> None:
         """
         Updates a package's properties on the Pennsieve API.
